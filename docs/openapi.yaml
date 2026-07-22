@@ -1,0 +1,306 @@
+openapi: 3.0.3
+info:
+  title: Cobranzas CRM API
+  version: "1.0"
+  description: >
+    API REST del CRM omnicanal de cobranzas. Autenticación Bearer (Laravel Sanctum).
+    Contrato detallado y filtros por endpoint en docs/API.md.
+servers:
+  - url: http://localhost:8010/api/v1
+    description: Local
+security:
+  - bearerAuth: []
+tags:
+  - {name: Auth}
+  - {name: Contactos}
+  - {name: Deudas}
+  - {name: Importación}
+  - {name: Campañas}
+  - {name: Llamadas}
+  - {name: Prompts IA}
+  - {name: Acuerdos}
+  - {name: Seguimientos}
+  - {name: WhatsApp}
+  - {name: Reportes}
+  - {name: Configuración}
+  - {name: Webhooks}
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Iniciar sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string}
+      responses:
+        "200":
+          description: Token y usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token: {type: string}
+                      user: {$ref: "#/components/schemas/User"}
+        "422": {$ref: "#/components/responses/ValidationError"}
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Usuario autenticado
+      responses:
+        "200": {description: Usuario con roles y permisos}
+  /contacts:
+    get:
+      tags: [Contactos]
+      summary: Listar contactos
+      parameters:
+        - {name: search, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string}}
+        - {name: segment, in: query, schema: {type: string}}
+        - {name: city, in: query, schema: {type: string}}
+        - {name: tag, in: query, schema: {type: string}}
+        - {name: has_debt, in: query, schema: {type: boolean}}
+        - {name: page, in: query, schema: {type: integer}}
+        - {name: per_page, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - properties:
+                      data:
+                        type: array
+                        items: {$ref: "#/components/schemas/Contact"}
+    post:
+      tags: [Contactos]
+      summary: Crear contacto
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ContactInput"}
+      responses:
+        "201": {description: Creado}
+        "422": {$ref: "#/components/responses/ValidationError"}
+  /contacts/{uuid}:
+    parameters: [{name: uuid, in: path, required: true, schema: {type: string, format: uuid}}]
+    get: {tags: [Contactos], summary: Ver contacto, responses: {"200": {description: OK}}}
+    put: {tags: [Contactos], summary: Actualizar, responses: {"200": {description: OK}}}
+    delete: {tags: [Contactos], summary: Eliminar (soft delete), responses: {"200": {description: OK}}}
+  /contacts/{uuid}/timeline:
+    get:
+      tags: [Contactos]
+      summary: Línea de tiempo unificada (llamadas, acuerdos, WhatsApp, seguimientos, notas)
+      parameters: [{name: uuid, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: Eventos ordenados desc}}
+  /imports:
+    post:
+      tags: [Importación]
+      summary: Subir Excel/CSV (devuelve cabeceras, vista previa y mapeo sugerido)
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: {type: string, format: binary}
+                type: {type: string, enum: [contacts, debts]}
+      responses: {"201": {description: Import creado en estado mapping}}
+  /imports/{uuid}/mapping:
+    post:
+      tags: [Importación]
+      summary: Confirmar mapeo de columnas y encolar procesamiento
+      parameters: [{name: uuid, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: Procesando en segundo plano}}
+  /campaigns:
+    get: {tags: [Campañas], summary: Listar campañas, responses: {"200": {description: OK}}}
+    post:
+      tags: [Campañas]
+      summary: Crear campaña
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/CampaignInput"}
+      responses: {"201": {description: Creada en draft}}
+  /campaigns/preview-segment:
+    post:
+      tags: [Campañas]
+      summary: Vista previa del segmento (conteo + muestra de 10)
+      responses: {"200": {description: "{count, sample[]}"}}
+  /campaigns/{uuid}/launch:
+    post: {tags: [Campañas], summary: Lanzar inmediatamente, parameters: [{name: uuid, in: path, required: true, schema: {type: string}}], responses: {"200": {description: running}}}
+  /campaigns/{uuid}/progress:
+    get: {tags: [Campañas], summary: Avance en tiempo real, parameters: [{name: uuid, in: path, required: true, schema: {type: string}}], responses: {"200": {description: Totales por estado, tasa de respuesta, costo}}}
+  /calls:
+    get: {tags: [Llamadas], summary: Listar llamadas, responses: {"200": {description: OK}}}
+    post:
+      tags: [Llamadas]
+      summary: Llamada manual (aviso, TTS o conversacional IA)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact_uuid, type]
+              properties:
+                contact_uuid: {type: string, format: uuid}
+                type: {type: string, enum: [recorded_audio, tts, ivr, ai_conversational, manual]}
+                tts_message: {type: string}
+                audio_url: {type: string}
+                prompt_version_uuid: {type: string, format: uuid}
+      responses: {"201": {description: Encolada}}
+  /calls/{uuid}/recording-url:
+    get:
+      tags: [Llamadas]
+      summary: URL firmada de la grabación (audita la escucha)
+      parameters: [{name: uuid, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: URL temporal}}
+  /prompts/{uuid}/simulate:
+    post:
+      tags: [Prompts IA]
+      summary: Simulador de conversación con el agente
+      parameters: [{name: uuid, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_uuid: {type: string, format: uuid, description: Omitir para iniciar sesión}
+                message: {type: string}
+                contact_uuid: {type: string, format: uuid}
+      responses:
+        "200": {description: "{session_uuid, reply, tool_calls[], finished, structured_result}"}
+  /agreements:
+    get: {tags: [Acuerdos], summary: Listar acuerdos, responses: {"200": {description: OK}}}
+    post: {tags: [Acuerdos], summary: Registrar acuerdo (programa verificación automática), responses: {"201": {description: Creado}}}
+  /follow-ups:
+    get: {tags: [Seguimientos], summary: Cola de seguimientos, responses: {"200": {description: OK}}}
+  /follow-up-rules:
+    get: {tags: [Seguimientos], summary: Reglas configurables (trigger → acción → delay), responses: {"200": {description: OK}}}
+  /conversations:
+    get: {tags: [WhatsApp], summary: Bandeja de conversaciones, responses: {"200": {description: OK}}}
+  /conversations/{uuid}/messages:
+    parameters: [{name: uuid, in: path, required: true, schema: {type: string}}]
+    get: {tags: [WhatsApp], summary: Mensajes (paginado hacia atrás con ?before=), responses: {"200": {description: OK}}}
+    post: {tags: [WhatsApp], summary: "Enviar mensaje (texto libre en ventana 24h, plantilla fuera)", responses: {"201": {description: Encolado}}}
+  /dashboard:
+    get: {tags: [Reportes], summary: KPIs y gráficos del panel, responses: {"200": {description: "{kpis{18}, charts{7}}"}}}
+  /reports/calls:
+    get: {tags: [Reportes], summary: Reporte de llamadas (?export=csv), responses: {"200": {description: OK}}}
+  /integrations/{provider}:
+    put:
+      tags: [Configuración]
+      summary: Guardar credenciales cifradas (twilio|whatsapp|openai|storage)
+      parameters: [{name: provider, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: Credenciales enmascaradas}}
+  /webhooks/twilio/voice/status:
+    post:
+      tags: [Webhooks]
+      security: []
+      summary: Estado de llamada (firma X-Twilio-Signature validada, idempotente)
+      responses: {"200": {description: OK}}
+  /webhooks/twilio/whatsapp:
+    post:
+      tags: [Webhooks]
+      security: []
+      summary: Mensaje entrante de WhatsApp
+      responses: {"200": {description: TwiML vacío}}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  responses:
+    ValidationError:
+      description: Error de validación
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: {type: string}
+              errors: {type: object, additionalProperties: {type: array, items: {type: string}}}
+  schemas:
+    Paginated:
+      type: object
+      properties:
+        data: {type: array, items: {}}
+        meta:
+          type: object
+          properties:
+            current_page: {type: integer}
+            last_page: {type: integer}
+            per_page: {type: integer}
+            total: {type: integer}
+    User:
+      type: object
+      properties:
+        uuid: {type: string, format: uuid}
+        name: {type: string}
+        email: {type: string}
+        status: {type: string, enum: [active, inactive]}
+        roles: {type: array, items: {type: string}}
+        permissions: {type: array, items: {type: string}}
+    Contact:
+      type: object
+      properties:
+        uuid: {type: string, format: uuid}
+        internal_code: {type: string, nullable: true}
+        first_name: {type: string}
+        last_name: {type: string}
+        full_name: {type: string}
+        dni: {type: string, nullable: true}
+        phone: {type: string}
+        email: {type: string, nullable: true}
+        city: {type: string, nullable: true}
+        status: {type: string}
+        segment: {type: string, nullable: true}
+        call_consent: {type: boolean}
+        whatsapp_consent: {type: boolean}
+        do_not_contact: {type: boolean}
+        tags: {type: array, items: {type: object}}
+        total_debt: {type: number}
+    ContactInput:
+      type: object
+      required: [first_name, last_name, phone]
+      properties:
+        first_name: {type: string}
+        last_name: {type: string}
+        dni: {type: string}
+        phone: {type: string}
+        email: {type: string}
+        city: {type: string}
+        segment: {type: string}
+        call_consent: {type: boolean}
+        whatsapp_consent: {type: boolean}
+        tags: {type: array, items: {type: string}}
+    CampaignInput:
+      type: object
+      required: [name, type]
+      properties:
+        name: {type: string}
+        type: {type: string, enum: [recorded_audio, tts, ivr, ai_conversational, whatsapp, mixed]}
+        starts_at: {type: string, format: date-time}
+        allowed_from: {type: string, example: "08:00"}
+        allowed_until: {type: string, example: "20:00"}
+        allowed_days: {type: array, items: {type: integer}}
+        max_attempts: {type: integer}
+        retry_minutes: {type: integer}
+        max_concurrent_calls: {type: integer}
+        segment_filters: {type: object}
+        tts_message: {type: string}
+        prompt_version_uuid: {type: string}
+        dtmf_options: {type: object}
+        budget_limit: {type: number}
