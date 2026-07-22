@@ -44,21 +44,38 @@ class SettingController extends Controller
 
     // ---- Integraciones ----
 
+    /**
+     * Campos de credenciales que espera cada proveedor. Se envían siempre, aunque
+     * todavía no haya nada guardado: sin esto la pantalla no puede dibujar los
+     * campos para una integración nueva y queda imposible configurarla.
+     */
+    protected const CREDENTIAL_FIELDS = [
+        'twilio' => ['account_sid', 'auth_token', 'phone_number'],
+        'whatsapp' => ['account_sid', 'auth_token', 'whatsapp_from'],
+        'anthropic' => ['api_key', 'model'],
+        'openai' => ['api_key', 'model'],
+        'storage' => ['key', 'secret', 'region', 'bucket', 'endpoint'],
+    ];
+
     public function integrations()
     {
-        $providers = ['twilio', 'whatsapp', 'anthropic', 'openai', 'storage'];
-
-        $data = collect($providers)->map(function ($provider) {
+        $data = collect(self::CREDENTIAL_FIELDS)->map(function (array $fields, string $provider) {
             $integration = Integration::where('provider', $provider)->first();
+            $saved = $integration?->maskedCredentials() ?? [];
+
+            // Cada campo esperado aparece siempre; con su valor enmascarado si ya existe.
+            $credentials = collect($fields)
+                ->mapWithKeys(fn (string $field) => [$field => $saved[$field] ?? ''])
+                ->all();
 
             return [
                 'provider' => $provider,
                 'status' => $integration?->status ?? 'sandbox',
-                'credentials' => $integration?->maskedCredentials() ?? [],
+                'credentials' => $credentials,
                 'config' => $integration?->config ?? [],
                 'last_verified_at' => $integration?->last_verified_at?->toIso8601String(),
             ];
-        });
+        })->values();
 
         return response()->json(['data' => $data]);
     }
@@ -92,6 +109,10 @@ class SettingController extends Controller
 
         if (isset($data['status'])) {
             $integration->status = $data['status'];
+        } elseif ($integration->status === 'sandbox' && $this->hasRequiredCredentials($provider, $integration->getCredentials())) {
+            // Guardar credenciales completas equivale a querer usarlas: si no se
+            // activa aquí, quedarían guardadas pero el sistema seguiría en sandbox.
+            $integration->status = 'active';
         }
 
         $integration->save();
@@ -106,6 +127,29 @@ class SettingController extends Controller
             'credentials' => $integration->maskedCredentials(),
             'config' => $integration->config,
         ]]);
+    }
+
+    /**
+     * Credenciales mínimas para que un proveedor pueda operar de verdad.
+     * `model`, `endpoint` y similares son opcionales y tienen valor por defecto.
+     */
+    protected function hasRequiredCredentials(string $provider, array $credentials): bool
+    {
+        $required = match ($provider) {
+            'twilio' => ['account_sid', 'auth_token', 'phone_number'],
+            'whatsapp' => ['account_sid', 'auth_token', 'whatsapp_from'],
+            'anthropic', 'openai' => ['api_key'],
+            'storage' => ['key', 'secret', 'bucket'],
+            default => [],
+        };
+
+        foreach ($required as $field) {
+            if (empty($credentials[$field])) {
+                return false;
+            }
+        }
+
+        return $required !== [];
     }
 
     public function verifyIntegration(string $provider, IntegrationManager $manager)

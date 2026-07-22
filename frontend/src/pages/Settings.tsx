@@ -17,6 +17,32 @@ import { FormField } from '@/components/shared/FormField'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
 
+/** Nombres legibles para los campos de credenciales que devuelve el backend. */
+const CREDENTIAL_LABELS: Record<string, string> = {
+  account_sid: 'Account SID',
+  auth_token: 'Auth Token',
+  phone_number: 'Número de teléfono',
+  whatsapp_from: 'Número de WhatsApp',
+  api_key: 'API Key',
+  model: 'Modelo',
+  key: 'Access Key ID',
+  secret: 'Secret Access Key',
+  region: 'Región',
+  bucket: 'Bucket',
+  endpoint: 'Endpoint',
+}
+
+/** Campos que no deben mostrarse en claro mientras se escriben. */
+const SECRET_FIELDS = new Set(['auth_token', 'api_key', 'secret'])
+
+const CREDENTIAL_PLACEHOLDERS: Record<string, string> = {
+  account_sid: 'AC…',
+  phone_number: '+51999888777',
+  whatsapp_from: 'whatsapp:+51999888777',
+  model: 'claude-opus-4-8',
+  region: 'auto',
+}
+
 const PROVIDER_META: Record<string, { label: string; description: string; icon: React.ComponentType<{ className?: string }> }> = {
   twilio: { label: 'Twilio', description: 'Llamadas de voz salientes y webhooks', icon: Phone },
   whatsapp: { label: 'WhatsApp Business', description: 'Mensajería y plantillas de WhatsApp', icon: MessageCircle },
@@ -230,10 +256,11 @@ function IntegrationsTab({ canEdit }: { canEdit: boolean }) {
             </CardHeader>
             <CardContent className="space-y-3">
               {Object.entries(creds).map(([key, masked]) => (
-                <FormField key={key} label={key}>
+                <FormField key={key} label={CREDENTIAL_LABELS[key] ?? key}>
                   <Input
-                    type="text"
-                    placeholder={masked || '••••••••'}
+                    type={SECRET_FIELDS.has(key) ? 'password' : 'text'}
+                    autoComplete="off"
+                    placeholder={masked || CREDENTIAL_PLACEHOLDERS[key] || '••••••••'}
                     value={local[key] ?? ''}
                     disabled={!canEdit}
                     onChange={(e) =>
