@@ -1,5 +1,12 @@
 # Despliegue en producción — crmupeu.eventosupeu.com
 
+> ⚠️ **La red de la UPeU bloquea `eventosupeu.com`.** El firewall (Fortinet)
+> intercepta el tráfico y responde `403 Web Filter Violation` para el dominio
+> completo, incluido el apex. No es un problema del despliegue: `vercel.com` y el
+> backend en Railway sí pasan. Para entrar desde la universidad hay que pedir a
+> redes que incluya el dominio en la lista blanca; desde fuera (datos móviles,
+> casa) funciona con normalidad.
+
 Arquitectura objetivo:
 
 | Pieza | Servicio | Dominio |
