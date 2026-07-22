@@ -143,6 +143,13 @@ class AnthropicDriver implements LlmProvider
             $converted[] = ['role' => $role, 'content' => (string) ($message['content'] ?? '')];
         }
 
+        // Anthropic exige al menos un mensaje (el system va aparte). Cuando el agente
+        // debe saludar primero (primer turno sin mensaje del interlocutor) la lista
+        // queda vacía: inyectamos un turno de usuario que dispara el saludo.
+        if (empty($converted)) {
+            $converted[] = ['role' => 'user', 'content' => '(Inicia la llamada saludando al interlocutor.)'];
+        }
+
         return [$system, $converted];
     }
 
