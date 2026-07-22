@@ -20,7 +20,11 @@ Repositorio: `https://github.com/davidbarrantesd-spec/crmupeu`
 2. Nombre `crmupeu`, región la más cercana (`aws-us-east-1`).
 3. Copia la cadena **Pooled connection** (contiene `-pooler`), la que se usa en
    servidores con muchas conexiones cortas.
-4. Guárdala; será `DATABASE_URL` en Railway.
+4. Guárdala; será `DB_URL` en Railway.
+
+> ⚠️ La variable se llama **`DB_URL`**, no `DATABASE_URL`. Laravel lee `env('DB_URL')`
+> en `config/database.php`; `DATABASE_URL` es la convención de Heroku/Vercel y Laravel
+> la ignora, cayendo al host por defecto `127.0.0.1:5432` (error `Connection refused`).
 
 > Usa siempre la cadena *pooled*. La directa agota conexiones cuando el worker
 > y la API corren en paralelo.
@@ -58,7 +62,7 @@ APP_LOCALE=es
 FRONTEND_URL=https://crmupeu.eventosupeu.com
 
 DB_CONNECTION=pgsql
-DATABASE_URL=<cadena pooled de Neon>
+DB_URL=<cadena pooled de Neon>
 
 REDIS_URL=${{Redis.REDIS_URL}}
 QUEUE_CONNECTION=redis
