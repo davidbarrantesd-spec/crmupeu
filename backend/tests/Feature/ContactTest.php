@@ -34,7 +34,10 @@ class ContactTest extends TestCase
     public function test_contact_crud_and_audit(): void
     {
         $admin = $this->adminUser();
-        $contact = Contact::factory()->create();
+        // Ciudad inicial fijada a propósito: la factory elige al azar de una
+        // lista que incluye 'Cusco', y si coincidía, el update no cambiaba nada,
+        // Eloquent no disparaba el evento `updated` y no había registro que auditar.
+        $contact = Contact::factory()->create(['city' => 'Lima']);
 
         $this->actingAs($admin)
             ->putJson("/api/v1/contacts/{$contact->uuid}", ['city' => 'Cusco'])

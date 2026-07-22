@@ -1,36 +1,46 @@
-# Backend — Laravel 12 (PHP 8.3+)
-FROM php:8.3-fpm-alpine AS base
+# Backend — Laravel 12 sobre FrankenPHP (Caddy + PHP embebido).
+# Una sola imagen para los 4 servicios de Railway; cada servicio sobreescribe
+# el startCommand (ver docs/DEPLOYMENT.md):
+#   api        → CMD por defecto (servidor web, concurrente)
+#   worker     → php artisan queue:work
+#   scheduler  → php artisan schedule:work
+#   reverb     → php artisan reverb:start
+# PHP 8.4: composer.lock fija Symfony 8.1, que requiere >= 8.4.1.
+FROM dunglas/frankenphp:1-php8.4
 
-RUN apk add --no-cache postgresql-dev libzip-dev icu-dev oniguruma-dev libpng-dev supervisor \
-    && docker-php-ext-install pdo_pgsql pgsql zip intl bcmath pcntl gd opcache \
-    && apk add --no-cache $PHPIZE_DEPS && pecl install redis && docker-php-ext-enable redis \
-    && apk del $PHPIZE_DEPS
+# Extensiones requeridas por la aplicación.
+RUN install-php-extensions \
+        pdo_pgsql \
+        pgsql \
+        redis \
+        zip \
+        intl \
+        bcmath \
+        pcntl \
+        gd \
+        opcache
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-WORKDIR /var/www/html
+WORKDIR /app
 
+# Capa de dependencias cacheable: solo se reconstruye si cambian los manifiestos.
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+RUN composer install \
+        --no-dev \
+        --no-scripts \
+        --no-autoloader \
+        --prefer-dist \
+        --no-interaction
 
 COPY . .
-RUN composer dump-autoload --optimize \
+
+RUN composer dump-autoload --optimize --no-dev --no-interaction \
+    && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
-# --- Servidor web (php-fpm + artisan serve para despliegues simples) ---
-FROM base AS web
+# FrankenPHP sirve desde public/. Railway inyecta PORT en tiempo de ejecución,
+# por eso SERVER_NAME se resuelve en el CMD y no como ENV fijo.
 EXPOSE 8000
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
 
-# --- Worker de colas ---
-FROM base AS worker
-CMD ["php", "artisan", "queue:work", "--tries=3", "--backoff=10", "--max-time=3600"]
-
-# --- Scheduler ---
-FROM base AS scheduler
-CMD ["php", "artisan", "schedule:work"]
-
-# --- Reverb (websockets) ---
-FROM base AS reverb
-EXPOSE 8081
-CMD ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8081"]
+CMD ["sh", "-c", "php artisan config:cache && php artisan route:cache && SERVER_NAME=\":${PORT:-8000}\" frankenphp run --config /etc/caddy/Caddyfile"]

@@ -1,0 +1,35 @@
+# Nunca copiar entornos locales a la imagen: la configuración viene de las
+# variables de entorno del proveedor (Railway), no de un archivo.
+.env
+.env.*
+!.env.example
+
+# Dependencias: se instalan dentro de la imagen (sin dev).
+vendor/
+node_modules/
+
+# Caché de descubrimiento de paquetes generada en local: si se copia, apunta a
+# proveedores de dev (laravel/pail) que no existen en la imagen --no-dev y
+# `package:discover` falla.
+bootstrap/cache/*.php
+
+# Estado de ejecución local
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/app/public/*
+*.sqlite
+*.sqlite-journal
+
+# Herramientas y ruido
+.git/
+.github/
+.idea/
+.vscode/
+.phpunit.cache/
+.phpunit.result.cache
+tests/
+Dockerfile
+.dockerignore
+README.md

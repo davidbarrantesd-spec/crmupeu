@@ -18,6 +18,18 @@ const REVERB_HOST: string = import.meta.env.VITE_REVERB_HOST ?? 'localhost'
 const REVERB_PORT = Number(import.meta.env.VITE_REVERB_PORT ?? 8081)
 const REVERB_KEY: string = import.meta.env.VITE_REVERB_KEY ?? 'cobranzas-key'
 
+/**
+ * En producción la página se sirve por HTTPS y el navegador bloquea `ws://`
+ * (contenido mixto), así que el WebSocket debe ir por `wss://`. Se puede forzar
+ * con VITE_REVERB_SCHEME=https; si no, se deduce del esquema de la página.
+ */
+const REVERB_SCHEME = import.meta.env.VITE_REVERB_SCHEME as string | undefined
+const FORCE_TLS =
+  REVERB_SCHEME === 'https' ||
+  (REVERB_SCHEME === undefined &&
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:')
+
 function authEndpoint(): string {
   // API_URL termina en /api/v1 — broadcasting/auth vive en la raíz del backend
   return `${API_URL.replace(/\/api\/v1\/?$/, '')}/broadcasting/auth`
@@ -35,8 +47,8 @@ export function getEcho(): Echo<'reverb'> | null {
       wsHost: REVERB_HOST,
       wsPort: REVERB_PORT,
       wssPort: REVERB_PORT,
-      forceTLS: false,
-      enabledTransports: ['ws', 'wss'],
+      forceTLS: FORCE_TLS,
+      enabledTransports: FORCE_TLS ? ['wss'] : ['ws', 'wss'],
       authEndpoint: authEndpoint(),
       auth: {
         headers: {

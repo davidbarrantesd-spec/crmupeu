@@ -6,14 +6,14 @@ integrada, con auditoría completa, control de costos y roles/permisos granulare
 
 | Componente | Stack |
 |---|---|
-| Backend | Laravel 12 · PHP 8.3+ · Sanctum · Reverb · Queues (Redis) · Scheduler |
+| Backend | Laravel 12 · PHP 8.4+ · Sanctum · Reverb · Queues (Redis) · Scheduler |
 | Frontend | React + TypeScript + Vite · TanStack Query · Zustand · Tailwind + shadcn-style · Recharts |
 | Base de datos | PostgreSQL 16 (compatible Neon) · UUID públicos · soft deletes · auditoría |
-| Infra | Redis · MinIO/S3/R2 · Twilio (voz + WhatsApp) · OpenAI · Docker Compose |
+| Infra | Redis · MinIO/S3/R2 · Twilio (voz + WhatsApp) · Anthropic Claude / OpenAI · Docker Compose |
 
 ## Arranque rápido (local)
 
-Requisitos: PHP 8.3+, Composer, Node 20+, Docker.
+Requisitos: PHP 8.4+, Composer, Node 20+, Docker.
 
 ```bash
 # 1. Infraestructura (Postgres :5434, Redis :6380, MinIO :9100)

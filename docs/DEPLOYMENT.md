@@ -1,61 +1,241 @@
-# Despliegue en producción
+# Despliegue en producción — crmupeu.eventosupeu.com
 
-## Topología recomendada
+Arquitectura objetivo:
 
-| Pieza | Servicio | Notas |
+| Pieza | Servicio | Dominio |
 |---|---|---|
-| Frontend | **Vercel** | build estático Vite; `VITE_API_URL` apunta al backend |
-| Backend API | **Railway / Render** (o servidor propio) | imagen `backend/Dockerfile` target `web` |
-| Worker de colas | Railway/Render (2º servicio, misma imagen, target `worker`) | obligatorio para llamadas y WhatsApp |
-| Scheduler | 3er servicio target `scheduler` (o cron `php artisan schedule:run` cada minuto) | orquesta campañas/seguimientos |
-| Reverb (WebSockets) | 4º servicio target `reverb` (o Pusher como alternativa) | exponer wss:// |
-| PostgreSQL | **Neon** | usar el **pooled connection string** (pgbouncer) en `DATABASE_URL` |
-| Redis | Upstash / Railway Redis | colas, caché, locks |
-| Archivos | Cloudflare R2 o S3 | bucket para grabaciones/audios/adjuntos |
+| Frontend (React/Vite) | **Vercel** | `crmupeu.eventosupeu.com` |
+| Backend API + worker + scheduler + Reverb | **Railway** (4 servicios, misma imagen) | `api.crmupeu.eventosupeu.com` |
+| Base de datos | **Neon** (PostgreSQL) | — |
+| Colas, caché, sesiones | **Redis** (plugin de Railway) | — |
+| Grabaciones y adjuntos | **Cloudflare R2** o S3 | — |
 
-## Pasos
+Repositorio: `https://github.com/davidbarrantesd-spec/crmupeu`
 
-### 1. Neon
-1. Crear proyecto → copiar cadena pooled (`...-pooler.neon.tech`).
-2. En el backend: `DB_CONNECTION=pgsql` + `DATABASE_URL=postgres://...` (o variables sueltas) y `sslmode=require`.
-3. `php artisan migrate --force` y `php artisan db:seed --class=RolePermissionSeeder --force`
-   (NO ejecutar DemoSeeder en producción; crear el primer usuario con tinker o un seeder propio).
+---
 
-### 2. Backend (Railway/Render)
-Variables mínimas:
+## 1. Neon (base de datos)
+
+1. Entra a [console.neon.tech](https://console.neon.tech) → **New Project**.
+2. Nombre `crmupeu`, región la más cercana (`aws-us-east-1`).
+3. Copia la cadena **Pooled connection** (contiene `-pooler`), la que se usa en
+   servidores con muchas conexiones cortas.
+4. Guárdala; será `DATABASE_URL` en Railway.
+
+> Usa siempre la cadena *pooled*. La directa agota conexiones cuando el worker
+> y la API corren en paralelo.
+
+---
+
+## 2. Railway (backend)
+
+### 2.1 Crear el proyecto
+
+1. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
+   → selecciona `davidbarrantesd-spec/crmupeu`.
+2. En el servicio que crea por defecto, abre **Settings** y ajusta:
+   - **Root Directory**: `backend`
+   - **Builder**: `Dockerfile`
+   - **Service Name**: `api`
+
+### 2.2 Añadir Redis
+
+**New** → **Database** → **Add Redis**. Railway expone `REDIS_URL` automáticamente.
+
+### 2.3 Variables de entorno (servicio `api`)
+
+Pega esto en **Variables** → *Raw Editor*. El `APP_KEY` está en el archivo local
+`DEPLOY-VALORES.txt` (fuera de git).
+
 ```
-APP_ENV=production  APP_DEBUG=false  APP_KEY=(php artisan key:generate --show)
-APP_URL=https://api.midominio.com   FRONTEND_URL=https://crm.midominio.com
-DATABASE_URL=...    REDIS_URL=...
-QUEUE_CONNECTION=redis  CACHE_STORE=redis  SESSION_DRIVER=redis
-TELEPHONY_DRIVER=twilio  WHATSAPP_DRIVER=twilio  LLM_DRIVER=openai
-TWILIO_ACCOUNT_SID=...  TWILIO_AUTH_TOKEN=...  TWILIO_PHONE_NUMBER=+1...
-TWILIO_WHATSAPP_FROM=whatsapp:+1...  TWILIO_VALIDATE_SIGNATURE=true
-OPENAI_API_KEY=...  OPENAI_MODEL=gpt-4o
-FILESYSTEM_DISK=s3  AWS_* (credenciales R2/S3)  AWS_ENDPOINT=https://<r2>
-REVERB_* (host público wss)
-```
-Desplegar 4 servicios desde la misma imagen con targets web/worker/scheduler/reverb.
+APP_NAME=Cobranzas CRM
+APP_ENV=production
+APP_DEBUG=false
+APP_KEY=<el de DEPLOY-VALORES.txt>
+APP_URL=https://api.crmupeu.eventosupeu.com
+APP_TIMEZONE=America/Lima
+APP_LOCALE=es
+FRONTEND_URL=https://crmupeu.eventosupeu.com
 
-### 3. Twilio
-- Voice → en el número: sin webhook entrante necesario (las llamadas son salientes; los webhooks
-  answer/status/recording se pasan por llamada vía API).
-- Messaging/WhatsApp sender → webhook entrante: `https://api.midominio.com/api/v1/webhooks/twilio/whatsapp`
-  y status callback: `.../webhooks/twilio/whatsapp/status`.
-- Mantener `TWILIO_VALIDATE_SIGNATURE=true` (valida `X-Twilio-Signature` en todos los webhooks).
+DB_CONNECTION=pgsql
+DATABASE_URL=<cadena pooled de Neon>
 
-### 4. Vercel (frontend)
-```
-cd frontend && vercel --prod
-# Variables: VITE_API_URL=https://api.midominio.com/api/v1
-#            VITE_REVERB_HOST=reverb.midominio.com  VITE_REVERB_PORT=443  VITE_REVERB_KEY=...
-```
-SPA fallback: agregar `vercel.json` con rewrite `{"source": "/(.*)", "destination": "/index.html"}`.
+REDIS_URL=${{Redis.REDIS_URL}}
+QUEUE_CONNECTION=redis
+CACHE_STORE=redis
+SESSION_DRIVER=redis
 
-### 5. Checklist de producción
-- [ ] HTTPS en API y frontend; CORS restringido a `FRONTEND_URL`.
-- [ ] `APP_DEBUG=false`; logs estructurados sin datos sensibles.
-- [ ] Rotar `APP_KEY`/tokens según política; credenciales de integraciones solo cifradas en BD.
-- [ ] Límites configurados: presupuesto mensual, llamadas diarias, concurrencia.
-- [ ] Retención de grabaciones configurada y bucket privado (URLs firmadas).
-- [ ] Backups de Neon activados.
+BROADCAST_CONNECTION=reverb
+REVERB_APP_ID=crmupeu
+REVERB_APP_KEY=<inventa una cadena aleatoria>
+REVERB_APP_SECRET=<inventa otra cadena aleatoria>
+REVERB_HOST=ws.crmupeu.eventosupeu.com
+REVERB_PORT=443
+REVERB_SCHEME=https
+
+LOG_CHANNEL=stderr
+LOG_LEVEL=warning
+
+# Integraciones — empieza en sandbox y cambia cuando tengas credenciales
+TELEPHONY_DRIVER=sandbox
+WHATSAPP_DRIVER=sandbox
+LLM_DRIVER=anthropic
+ANTHROPIC_API_KEY=<tu llave de Anthropic>
+ANTHROPIC_MODEL=claude-opus-4-8
+TWILIO_VALIDATE_SIGNATURE=true
+
+FILESYSTEM_DISK=s3
+AWS_ACCESS_KEY_ID=<R2 / S3>
+AWS_SECRET_ACCESS_KEY=<R2 / S3>
+AWS_DEFAULT_REGION=auto
+AWS_BUCKET=crmupeu
+AWS_ENDPOINT=<endpoint de R2>
+AWS_USE_PATH_STYLE_ENDPOINT=true
+
+CALL_MAX_CONCURRENCY=5
+CALL_DAILY_LIMIT=1000
+```
+
+### 2.4 Los otros tres servicios
+
+Repite **New** → **GitHub Repo** → mismo repo, tres veces. En cada uno:
+Root Directory `backend`, Builder `Dockerfile`, y en **Settings → Deploy →
+Custom Start Command** pon:
+
+| Servicio | Start Command |
+|---|---|
+| `worker` | `php artisan queue:work --tries=3 --backoff=10 --max-time=3600` |
+| `scheduler` | `php artisan schedule:work` |
+| `reverb` | `php artisan reverb:start --host=0.0.0.0 --port=$PORT` |
+
+En **Variables** de cada uno usa *Shared Variables* o pega las mismas del `api`.
+Los servicios `worker` y `scheduler` no necesitan dominio público.
+
+### 2.5 Migraciones (una sola vez)
+
+En el servicio `api`, pestaña **Settings → Deploy → Pre-Deploy Command**:
+
+```
+php artisan migrate --force && php artisan db:seed --class=RolePermissionSeeder --force
+```
+
+> **No** ejecutes `DemoSeeder` en producción: crea 120 contactos ficticios y la
+> cuenta `admin@example.com`. El `RolePermissionSeeder` solo crea roles y permisos.
+
+### 2.6 Crear tu usuario administrador
+
+Una vez desplegado, en la consola de Railway (`api` → **Connect** → shell):
+
+```bash
+php artisan tinker --execute="
+\$u = App\Models\User::create([
+  'name' => 'David Barrantes',
+  'email' => 'claudedti.itam@upeu.edu.pe',
+  'password' => 'CAMBIA_ESTA_CLAVE',
+  'status' => 'active',
+]);
+\$u->assignRole('Superadministrador');
+echo 'usuario creado';
+"
+```
+
+---
+
+## 3. Vercel (frontend)
+
+1. [vercel.com/new](https://vercel.com/new) → **Import Git Repository** →
+   `davidbarrantesd-spec/crmupeu`.
+2. **Root Directory**: `frontend` (importante — el repo es un monorepo).
+3. Framework: Vite (se autodetecta). El `vercel.json` ya trae el rewrite de SPA.
+4. **Environment Variables**:
+
+```
+VITE_API_URL=https://api.crmupeu.eventosupeu.com/api/v1
+VITE_REVERB_HOST=ws.crmupeu.eventosupeu.com
+VITE_REVERB_PORT=443
+VITE_REVERB_KEY=<el mismo REVERB_APP_KEY de Railway>
+VITE_REVERB_SCHEME=https
+```
+
+> `VITE_REVERB_SCHEME=https` es obligatorio en producción: sirve el WebSocket por
+> `wss://`. Con `ws://` el navegador lo bloquea por contenido mixto y el tiempo
+> real cae al polling de respaldo.
+
+5. **Deploy**.
+
+> Vite embebe estas variables en tiempo de compilación: si cambias una, hay que
+> redesplegar (no basta con guardarla).
+
+---
+
+## 4. Dominios
+
+### 4.1 Frontend
+
+En Vercel: **Settings → Domains** → añade `crmupeu.eventosupeu.com`.
+Vercel te dará un registro CNAME. En el DNS de `eventosupeu.com`:
+
+```
+crmupeu    CNAME    cname.vercel-dns.com.
+```
+
+### 4.2 Backend y WebSocket
+
+En Railway, servicio `api` → **Settings → Networking → Custom Domain** →
+`api.crmupeu.eventosupeu.com`. Repite en `reverb` con `ws.crmupeu.eventosupeu.com`.
+Railway te da un CNAME para cada uno:
+
+```
+api    CNAME    <valor que da Railway>.up.railway.app.
+ws     CNAME    <valor que da Railway>.up.railway.app.
+```
+
+---
+
+## 5. Twilio (cuando actives llamadas reales)
+
+1. Compra un número con capacidad **Voice**.
+2. En **Configuración → Integraciones → Twilio** del CRM, pega Account SID,
+   Auth Token y el número; pulsa **Verificar**.
+3. Cambia en Railway `TELEPHONY_DRIVER=twilio`.
+4. Webhook de WhatsApp entrante (cuando lo actives):
+   `https://api.crmupeu.eventosupeu.com/api/v1/webhooks/twilio/whatsapp`
+
+Los webhooks de voz se pasan por llamada vía API, no hay que configurarlos en la
+consola de Twilio.
+
+---
+
+## 6. Verificación post-despliegue
+
+```bash
+# API viva
+curl https://api.crmupeu.eventosupeu.com/up
+
+# Login (debe devolver un token)
+curl -X POST https://api.crmupeu.eventosupeu.com/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"claudedti.itam@upeu.edu.pe","password":"TU_CLAVE"}'
+```
+
+Checklist:
+
+- [ ] `APP_DEBUG=false` en Railway
+- [ ] `TWILIO_VALIDATE_SIGNATURE=true`
+- [ ] `DemoSeeder` **no** ejecutado en producción
+- [ ] Backups automáticos activados en Neon
+- [ ] Límites de costo configurados en **Configuración → Costos y límites**
+- [ ] Bucket de R2/S3 privado (las grabaciones se sirven con URL firmada)
+
+---
+
+## Costos mensuales estimados
+
+| Servicio | Costo |
+|---|---|
+| Vercel Hobby | $0 |
+| Neon (free tier) | $0 hasta 0.5 GB |
+| Railway Hobby (4 servicios + Redis) | ~$5–15 según uso |
+| Cloudflare R2 | $0 hasta 10 GB |
+| Número Twilio | ~$1 + consumo por minuto |
+| Anthropic | por uso |

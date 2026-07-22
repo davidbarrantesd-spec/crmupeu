@@ -22,3 +22,4 @@ build/
 # Datos locales
 *.sqlite
 *.sqlite-journal
+DEPLOY-VALORES.txt

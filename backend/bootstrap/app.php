@@ -17,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ['prefix' => '', 'middleware' => ['auth:sanctum']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Detrás del proxy de Railway/Vercel hay que confiar en los headers
+        // X-Forwarded-*; si no, request()->isSecure() da false y route() genera
+        // URLs http:// en los webhooks que se envían a Twilio.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
