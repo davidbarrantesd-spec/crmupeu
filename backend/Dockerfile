@@ -39,8 +39,12 @@ RUN composer dump-autoload --optimize --no-dev --no-interaction \
     && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
-# FrankenPHP sirve desde public/. Railway inyecta PORT en tiempo de ejecución,
-# por eso SERVER_NAME se resuelve en el CMD y no como ENV fijo.
+# FrankenPHP sirve desde public/ y lee el puerto de SERVER_NAME (lo consume el
+# Caddyfile de la imagen base). Se deja como ENV explícito porque Railway NO
+# inyecta PORT automáticamente: si se dependiera de ${PORT}, el contenedor
+# quedaría escuchando en el 8080 por defecto y el dominio devolvería 502.
+# Para cambiar de puerto, sobreescribe SERVER_NAME (p. ej. SERVER_NAME=:3000).
+ENV SERVER_NAME=:8000
 EXPOSE 8000
 
-CMD ["sh", "-c", "php artisan config:cache && php artisan route:cache && SERVER_NAME=\":${PORT:-8000}\" frankenphp run --config /etc/caddy/Caddyfile"]
+CMD ["sh", "-c", "php artisan config:cache && php artisan route:cache && frankenphp run --config /etc/caddy/Caddyfile"]

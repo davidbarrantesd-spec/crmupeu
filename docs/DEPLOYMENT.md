@@ -42,6 +42,10 @@ Repositorio: `https://github.com/davidbarrantesd-spec/crmupeu`
    - **Builder**: `Dockerfile`
    - **Service Name**: `api`
 
+> ⚠️ Railway **no** inyecta `PORT` automáticamente. Hay que definirlo como variable
+> (`PORT=8000`) y que coincida con el *target port* del dominio del servicio; si no,
+> FrankenPHP escucha en su 8080 por defecto y el dominio responde `502`.
+
 ### 2.2 Añadir Redis
 
 **New** → **Database** → **Add Redis**. Railway expone `REDIS_URL` automáticamente.
@@ -55,6 +59,7 @@ Pega esto en **Variables** → *Raw Editor*. El `APP_KEY` está en el archivo lo
 APP_NAME=Cobranzas CRM
 APP_ENV=production
 APP_DEBUG=false
+PORT=8000
 APP_KEY=<el de DEPLOY-VALORES.txt>
 APP_URL=https://api.crmupeu.eventosupeu.com
 APP_TIMEZONE=America/Lima
