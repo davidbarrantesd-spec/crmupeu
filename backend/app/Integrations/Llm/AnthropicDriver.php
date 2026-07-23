@@ -31,12 +31,12 @@ class AnthropicDriver implements LlmProvider
     {
         [$system, $anthropicMessages] = $this->convertMessages($messages);
 
+        $model = $options['model'] ?? $this->model;
+
         $params = [
-            'model' => $options['model'] ?? $this->model,
+            'model' => $model,
             'maxTokens' => $options['max_tokens'] ?? 1024,
             'messages' => $anthropicMessages,
-            // Latencia conversacional: esfuerzo bajo salvo que se indique otro.
-            'outputConfig' => ['effort' => $options['effort'] ?? 'low'],
             // Sin razonamiento previo: en voz cada segundo de silencio cuenta,
             // y los modelos Claude 5 piensan antes de responder por defecto.
             'thinking' => ['type' => 'disabled'],
@@ -45,6 +45,13 @@ class AnthropicDriver implements LlmProvider
             // menos latencia al primer token y ~90% menos costo de entrada.
             'cacheControl' => ['type' => 'ephemeral'],
         ];
+
+        // effort solo existe en los modelos que lo soportan (familia Claude 5,
+        // Opus recientes); Haiku lo rechaza con Bad Request.
+        if (! str_contains($model, 'haiku')) {
+            // Latencia conversacional: esfuerzo bajo salvo que se indique otro.
+            $params['outputConfig'] = ['effort' => $options['effort'] ?? 'low'];
+        }
 
         if ($system !== null) {
             $params['system'] = $system;
