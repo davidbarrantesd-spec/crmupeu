@@ -54,11 +54,23 @@ class AiConversationService
 
         $llm = $this->integrations->llm();
         $definitions = $this->tools->definitions($session->promptVersion?->enabled_tools ?? []);
-        $options = $onText ? ['on_text' => $onText] : [];
+
+        // Entre rondas de tools el modelo retoma el texto sin separador; el
+        // espacio evita que el TTS pronuncie dos frases pegadas.
+        $anyText = false;
+        $options = $onText ? ['on_text' => function (string $chunk) use (&$anyText, $onText) {
+            $anyText = true;
+            $onText($chunk);
+        }] : [];
+
         $allToolCalls = [];
         $reply = null;
 
         for ($round = 0; $round < self::MAX_TOOL_ROUNDS; $round++) {
+            if ($round > 0 && $anyText && $onText) {
+                $onText(' ');
+            }
+
             $response = $llm->chat($messages, $definitions, $options);
             $session->increment('total_tokens', $response['tokens']);
 
