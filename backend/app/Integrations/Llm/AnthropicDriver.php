@@ -40,6 +40,10 @@ class AnthropicDriver implements LlmProvider
             // Sin razonamiento previo: en voz cada segundo de silencio cuenta,
             // y los modelos Claude 5 piensan antes de responder por defecto.
             'thinking' => ['type' => 'disabled'],
+            // Caché automática del prompt: cada turno reutiliza el contexto ya
+            // procesado (system + historial + tools) en vez de reprocesarlo —
+            // menos latencia al primer token y ~90% menos costo de entrada.
+            'cacheControl' => ['type' => 'ephemeral'],
         ];
 
         if ($system !== null) {
