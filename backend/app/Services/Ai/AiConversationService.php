@@ -29,7 +29,7 @@ class AiConversationService
             'contact_id' => $contact?->id,
             'mode' => $mode,
             'status' => 'active',
-            'messages' => [['role' => 'system', 'content' => $this->buildSystemPrompt($version, $contact)]],
+            'messages' => [['role' => 'system', 'content' => $this->buildSystemPrompt($version, $contact, $mode)]],
             'user_id' => auth()->id(),
         ]);
 
@@ -39,9 +39,12 @@ class AiConversationService
     /**
      * Procesa un turno del usuario y devuelve la respuesta del agente.
      *
+     * $onText (opcional, voz en vivo): recibe cada fragmento de texto apenas
+     * el LLM lo genera, para que el TTS hable sin esperar el turno completo.
+     *
      * @return array{reply: ?string, tool_calls: array, finished: bool, structured_result: ?array}
      */
-    public function turn(AiSession $session, ?string $userMessage): array
+    public function turn(AiSession $session, ?string $userMessage, ?callable $onText = null): array
     {
         $messages = $session->messages ?? [];
 
@@ -51,11 +54,12 @@ class AiConversationService
 
         $llm = $this->integrations->llm();
         $definitions = $this->tools->definitions($session->promptVersion?->enabled_tools ?? []);
+        $options = $onText ? ['on_text' => $onText] : [];
         $allToolCalls = [];
         $reply = null;
 
         for ($round = 0; $round < self::MAX_TOOL_ROUNDS; $round++) {
-            $response = $llm->chat($messages, $definitions);
+            $response = $llm->chat($messages, $definitions, $options);
             $session->increment('total_tokens', $response['tokens']);
 
             if (empty($response['tool_calls'])) {
@@ -141,7 +145,7 @@ class AiConversationService
         ]);
     }
 
-    protected function buildSystemPrompt(PromptVersion $version, ?Contact $contact): string
+    protected function buildSystemPrompt(PromptVersion $version, ?Contact $contact, string $mode = 'live'): string
     {
         $guardrails = $version->guardrails ?? [];
         $forbidden = implode(', ', $guardrails['forbidden_data'] ?? []);
@@ -151,10 +155,41 @@ class AiConversationService
             ? "Estás llamando a {$contact->full_name}".($contact->city ? " de {$contact->city}" : '').'.'
             : 'Estás en una conversación de prueba.';
 
+        // Deudas precargadas: evita una ronda completa de LLM + herramienta a
+        // mitad de la llamada (la mayor fuente de silencios). Solo se revelan
+        // tras validar identidad, como exigen las reglas.
+        $debtContext = null;
+        if ($contact) {
+            $debts = $contact->debts()
+                ->whereIn('status', ['pending', 'overdue', 'partial'])
+                ->orderBy('due_date')
+                ->limit(3)
+                ->get();
+
+            if ($debts->isNotEmpty()) {
+                $lines = $debts->map(fn ($d) => "- {$d->concept}: {$d->currency} ".number_format((float) $d->pending_balance, 2)
+                    .", venció el {$d->due_date?->format('d/m/Y')}")->implode("\n");
+                $debtContext = "DEUDA DEL CONTACTO (dato confirmado del sistema, no necesitas consultar_deuda):\n{$lines}";
+            }
+        }
+
+        // En llamadas de voz el texto se pronuncia con TTS: frases cortas y
+        // habladas, nada de listas ni símbolos, y jamás silencio sin aviso.
+        $voiceRules = $mode === 'live'
+            ? "ESTILO DE VOZ (esto se pronuncia por teléfono):\n"
+            ."- Frases cortas: máximo 2 oraciones por respuesta.\n"
+            ."- Lenguaje hablado natural y cálido, español latino formal (trato de usted).\n"
+            ."- Nunca uses listas, viñetas, símbolos ni formatos: solo texto corrido pronunciable.\n"
+            ."- Di los montos en palabras naturales: 'cuatrocientos cincuenta soles', no 'S/450.00'.\n"
+            ."- Si vas a usar una herramienta, di ANTES una frase breve como 'Permítame un momento, por favor'."
+            : null;
+
         return implode("\n\n", array_filter([
             $version->system_prompt,
             $version->instructions ? "INSTRUCCIONES:\n{$version->instructions}" : null,
             "CONTEXTO: {$context}",
+            $debtContext,
+            $voiceRules,
             "REGLAS OBLIGATORIAS:\n"
             ."- Nunca inventes información: usa solo datos devueltos por las herramientas.\n"
             ."- Nunca modifiques montos de deuda ni ofrezcas descuentos no autorizados.\n"

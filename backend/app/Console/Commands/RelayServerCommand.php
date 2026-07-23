@@ -164,7 +164,10 @@ class RelayServerCommand extends Command
         );
 
         $conn->on('data', [$messageBuffer, 'onData']);
-        $conn->on('close', fn () => $this->line("desconectado call={$call->uuid}"));
+        $conn->on('close', function () use ($session, $call) {
+            $session->onDisconnect();
+            $this->line("desconectado call={$call->uuid}");
+        });
 
         $this->info("conexión aceptada call={$call->uuid} contacto={$call->contact?->full_name}");
     }

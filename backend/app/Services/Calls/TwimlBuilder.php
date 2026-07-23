@@ -89,15 +89,17 @@ class TwimlBuilder
         $token = hash_hmac('sha256', $call->uuid, config('app.key'));
         $wsUrl = "{$base}/relay/{$call->uuid}?token={$token}";
 
-        // Voz latina neutra por defecto; la campaña puede definir otra
-        // (formato ConversationRelay, sin el prefijo "Polly." de <Say>).
-        $voice = str_replace('Polly.', '', $call->campaign?->voice ?: 'Lupe-Generative');
+        // ElevenLabs = la voz más natural que ofrece ConversationRelay.
+        // CaJslL1xziwefCeTNzHv es la voz es-US por defecto de Twilio para
+        // este proveedor (garantizada en su inventario — un nombre inválido
+        // haría fallback silencioso a una voz robótica básica).
+        $voice = $call->campaign?->voice ?: 'CaJslL1xziwefCeTNzHv';
 
         return $this->document(
             '<Connect><ConversationRelay url="'.e($wsUrl).'"'
             .' welcomeGreeting="'.e($greeting).'"'
-            .' language="es-US" ttsProvider="Amazon" voice="'.e($voice).'"'
-            .' transcriptionProvider="Google" transcriptionLanguage="es-US">'
+            .' language="es-US" ttsProvider="ElevenLabs" voice="'.e($voice).'"'
+            .' transcriptionProvider="Google" transcriptionLanguage="es-US" speechModel="telephony">'
             .'<Parameter name="greeting" value="'.e($greeting).'"/>'
             .'</ConversationRelay></Connect>'
         );

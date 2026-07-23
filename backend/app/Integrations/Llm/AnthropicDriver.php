@@ -47,6 +47,13 @@ class AnthropicDriver implements LlmProvider
             $params['tools'] = $this->convertTools($tools);
         }
 
+        // Con on_text (voz en vivo) se usa la API de streaming: cada fragmento
+        // de texto se entrega apenas se genera, para que el TTS empiece a
+        // hablar sin esperar la respuesta completa.
+        if (is_callable($options['on_text'] ?? null)) {
+            return $this->chatStream($params, $options['on_text']);
+        }
+
         $response = $this->client()->messages->create(...$params);
 
         $content = null;
@@ -68,6 +75,60 @@ class AnthropicDriver implements LlmProvider
             'content' => $content,
             'tool_calls' => $toolCalls,
             'tokens' => ($response->usage->inputTokens ?? 0) + ($response->usage->outputTokens ?? 0),
+        ];
+    }
+
+    /**
+     * Variante streaming de chat(): misma respuesta acumulada al final, pero
+     * cada delta de texto se pasa a $onText en cuanto llega.
+     *
+     * @param  callable(string): void  $onText
+     */
+    protected function chatStream(array $params, callable $onText): array
+    {
+        $stream = $this->client()->messages->createStream(...$params);
+
+        $content = null;
+        $toolCalls = [];       // index => [id, name, json]
+        $tokens = 0;
+
+        foreach ($stream as $event) {
+            switch ($event->type ?? '') {
+                case 'message_start':
+                    $tokens += $event->message->usage->inputTokens ?? 0;
+                    break;
+
+                case 'content_block_start':
+                    $block = $event->contentBlock;
+                    if (($block->type ?? '') === 'tool_use') {
+                        $toolCalls[$event->index] = ['id' => $block->id, 'name' => $block->name, 'json' => ''];
+                    }
+                    break;
+
+                case 'content_block_delta':
+                    $delta = $event->delta;
+                    if (($delta->type ?? '') === 'text_delta' && $delta->text !== '') {
+                        $content = ($content ?? '').$delta->text;
+                        $onText($delta->text);
+                    } elseif (($delta->type ?? '') === 'input_json_delta' && isset($toolCalls[$event->index])) {
+                        $toolCalls[$event->index]['json'] .= $delta->partialJSON;
+                    }
+                    break;
+
+                case 'message_delta':
+                    $tokens += $event->usage->outputTokens ?? 0;
+                    break;
+            }
+        }
+
+        return [
+            'content' => $content,
+            'tool_calls' => array_values(array_map(fn (array $tc) => [
+                'id' => $tc['id'],
+                'name' => $tc['name'],
+                'arguments' => json_decode($tc['json'], true) ?: [],
+            ], $toolCalls)),
+            'tokens' => $tokens,
         ];
     }
 
