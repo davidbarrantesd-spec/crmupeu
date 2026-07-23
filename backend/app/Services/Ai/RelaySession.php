@@ -175,6 +175,8 @@ class RelaySession
                     ($this->send)(['type' => 'text', 'token' => $event['t'], 'last' => false]);
                 } elseif ($event['e'] === 'boot') {
                     ($this->log)(sprintf('boot hijo %dms (spawn→boot %.2fs)', $event['ms'], microtime(true) - $spawnedAt));
+                } elseif ($event['e'] === 'llm-start') {
+                    ($this->log)(sprintf('llm-start a %dms del boot (spawn→llm %.2fs)', $event['ms'], microtime(true) - $spawnedAt));
                 } elseif ($event['e'] === 'done') {
                     $this->finishTurn($event, $streamedAnything);
                 } elseif ($event['e'] === 'error') {

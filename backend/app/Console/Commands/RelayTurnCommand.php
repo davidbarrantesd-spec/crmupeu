@@ -48,6 +48,8 @@ class RelayTurnCommand extends Command
             // más rápido (p.ej. Haiku) solo para llamadas, sin tocar el resto.
             $llmOptions = array_filter(['model' => env('VOICE_LLM_MODEL')]);
 
+            $this->emit(['e' => 'llm-start', 'ms' => (int) ((microtime(true) - LARAVEL_START) * 1000)]);
+
             $result = $ai->turn($session, $message, function (string $chunk) use (&$streamed) {
                 $streamed .= $chunk;
                 $this->emit(['e' => 'token', 't' => $chunk]);
