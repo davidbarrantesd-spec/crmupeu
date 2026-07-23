@@ -27,6 +27,9 @@ class RelayTurnCommand extends Command
 
     public function handle(AiConversationService $ai): int
     {
+        // Telemetría de latencia: cuánto tardó en arrancar este proceso.
+        $this->emit(['e' => 'boot', 'ms' => (int) ((microtime(true) - LARAVEL_START) * 1000)]);
+
         $input = json_decode((string) stream_get_contents(STDIN), true) ?: [];
         $message = $input['message'] ?? null;
 

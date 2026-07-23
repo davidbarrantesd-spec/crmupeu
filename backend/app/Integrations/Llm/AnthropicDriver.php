@@ -37,6 +37,9 @@ class AnthropicDriver implements LlmProvider
             'messages' => $anthropicMessages,
             // Latencia conversacional: esfuerzo bajo salvo que se indique otro.
             'outputConfig' => ['effort' => $options['effort'] ?? 'low'],
+            // Sin razonamiento previo: en voz cada segundo de silencio cuenta,
+            // y los modelos Claude 5 piensan antes de responder por defecto.
+            'thinking' => ['type' => 'disabled'],
         ];
 
         if ($system !== null) {

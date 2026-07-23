@@ -153,8 +153,9 @@ class RelaySession
 
         $stdout = '';
         $streamedAnything = false;
+        $spawnedAt = microtime(true);
 
-        $process->stdout->on('data', function (string $chunk) use (&$stdout, &$streamedAnything) {
+        $process->stdout->on('data', function (string $chunk) use (&$stdout, &$streamedAnything, $spawnedAt) {
             $stdout .= $chunk;
 
             while (($pos = strpos($stdout, "\n")) !== false) {
@@ -167,8 +168,13 @@ class RelaySession
                 }
 
                 if ($event['e'] === 'token') {
+                    if (! $streamedAnything) {
+                        ($this->log)(sprintf('primer token a %.2fs del spawn', microtime(true) - $spawnedAt));
+                    }
                     $streamedAnything = true;
                     ($this->send)(['type' => 'text', 'token' => $event['t'], 'last' => false]);
+                } elseif ($event['e'] === 'boot') {
+                    ($this->log)(sprintf('boot hijo %dms (spawn→boot %.2fs)', $event['ms'], microtime(true) - $spawnedAt));
                 } elseif ($event['e'] === 'done') {
                     $this->finishTurn($event, $streamedAnything);
                 } elseif ($event['e'] === 'error') {
