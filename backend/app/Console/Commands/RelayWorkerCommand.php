@@ -32,6 +32,12 @@ class RelayWorkerCommand extends Command
 
     public function handle(AiConversationService $ai): int
     {
+        // Precalentar ANTES de declararse listo: conexión a la BD abierta y
+        // credenciales del LLM leídas/desencriptadas. Sin esto, el primer
+        // turno que atiende cada worker paga ~1.5s extra.
+        DB::connection()->getPdo();
+        app(\App\Integrations\IntegrationManager::class)->llm();
+
         // La misma instancia del servicio vive todo el proceso: su
         // IntegrationManager memoiza el driver LLM (y su conexión TLS).
         $this->emit(['e' => 'ready']);
