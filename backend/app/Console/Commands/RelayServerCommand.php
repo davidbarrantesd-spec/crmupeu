@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Call;
 use App\Services\Ai\AiConversationService;
 use App\Services\Ai\RelaySession;
+use App\Services\Ai\RelayWorkerPool;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Message;
 use Illuminate\Console\Command;
@@ -36,10 +37,20 @@ class RelayServerCommand extends Command
 
     protected $description = 'Servidor WebSocket ConversationRelay para llamadas conversacionales con IA';
 
+    protected ?RelayWorkerPool $pool = null;
+
     public function handle(AiConversationService $ai): int
     {
         $host = $this->option('host');
         $port = $this->option('port') ?: env('PORT', 8090);
+
+        // Workers precalentados: BD y cliente LLM ya conectados cuando llega
+        // el primer turno de una llamada.
+        $this->pool = new RelayWorkerPool(
+            size: (int) env('RELAY_WORKERS', 4),
+            log: fn (string $line) => $this->line('['.now()->format('H:i:s')."] {$line}"),
+        );
+        $this->pool->start();
 
         $negotiator = new ServerNegotiator(new RequestVerifier, new HttpFactory);
         $socket = new SocketServer("{$host}:{$port}");
@@ -139,6 +150,7 @@ class RelayServerCommand extends Command
         $session = new RelaySession(
             call: $call,
             ai: $ai,
+            pool: $this->pool,
             send: $send,
             close: fn () => $conn->end(),
             log: fn (string $line) => $this->line('['.now()->format('H:i:s')."] {$line}"),

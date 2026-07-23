@@ -50,7 +50,27 @@ class IntegrationManager
         return new SandboxWhatsAppDriver;
     }
 
+    /** Driver LLM memoizado: en procesos de larga vida (workers de voz) evita
+     * releer/desencriptar credenciales y recrear el cliente HTTP en cada turno
+     * (el cliente vivo reutiliza la conexión TLS con la API). TTL corto para
+     * recoger cambios de credenciales sin reiniciar. */
+    protected ?LlmProvider $llmDriver = null;
+
+    protected int $llmDriverExpiresAt = 0;
+
     public function llm(): LlmProvider
+    {
+        if ($this->llmDriver && time() < $this->llmDriverExpiresAt) {
+            return $this->llmDriver;
+        }
+
+        $this->llmDriver = $this->resolveLlm();
+        $this->llmDriverExpiresAt = time() + 300;
+
+        return $this->llmDriver;
+    }
+
+    protected function resolveLlm(): LlmProvider
     {
         // Anthropic (Claude) tiene prioridad si está configurado en BD o env.
         $anthropic = Integration::where('provider', 'anthropic')->first();

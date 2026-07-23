@@ -17,6 +17,8 @@ use Anthropic\Messages\ToolUseBlock;
  */
 class AnthropicDriver implements LlmProvider
 {
+    protected ?Client $client = null;
+
     public function __construct(
         protected string $apiKey,
         protected string $model = 'claude-opus-4-8',
@@ -24,7 +26,9 @@ class AnthropicDriver implements LlmProvider
 
     protected function client(): Client
     {
-        return new Client(apiKey: $this->apiKey);
+        // Cliente único por driver: Guzzle mantiene la conexión TLS viva entre
+        // llamadas, ahorrando el handshake (~300ms) en cada turno de voz.
+        return $this->client ??= new Client(apiKey: $this->apiKey);
     }
 
     public function chat(array $messages, array $tools = [], array $options = []): array

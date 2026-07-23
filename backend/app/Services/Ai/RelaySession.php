@@ -4,7 +4,6 @@ namespace App\Services\Ai;
 
 use App\Models\Call;
 use Closure;
-use React\ChildProcess\Process;
 use React\EventLoop\Loop;
 use React\EventLoop\TimerInterface;
 
@@ -12,17 +11,21 @@ use React\EventLoop\TimerInterface;
  * Maneja UNA conversación de voz vía Twilio ConversationRelay.
  *
  * Twilio transcribe lo que dice el interlocutor y lo envía como mensajes
- * "prompt". Cada turno se ejecuta en un proceso hijo (crm:relay-turn) que
- * emite los fragmentos de texto del LLM apenas se generan; aquí se reenvían
- * a Twilio como tokens parciales para que el TTS empiece a hablar de
- * inmediato. El event loop nunca se bloquea: los pings de Twilio se responden
- * a tiempo y varias llamadas pueden conversar en paralelo.
+ * "prompt". Cada turno se despacha al RelayWorkerPool (procesos PHP
+ * precalentados con BD y cliente LLM vivos) que emite los fragmentos de texto
+ * apenas el LLM los genera; aquí se reenvían a Twilio como tokens parciales
+ * para que el TTS empiece a hablar de inmediato. El event loop nunca se
+ * bloquea: los pings de Twilio se responden a tiempo y varias llamadas
+ * conversan en paralelo.
  */
 class RelaySession
 {
     protected ?\App\Models\AiSession $session = null;
 
-    protected ?Process $turnProcess = null;
+    protected bool $turnActive = false;
+
+    /** Descarta eventos tardíos de un turno que ya expiró por timeout. */
+    protected int $turnGeneration = 0;
 
     protected ?TimerInterface $turnTimeout = null;
 
@@ -36,6 +39,7 @@ class RelaySession
     public function __construct(
         protected Call $call,
         protected AiConversationService $ai,
+        protected RelayWorkerPool $pool,
         protected Closure $send,
         protected Closure $close,
         protected Closure $log,
@@ -77,9 +81,12 @@ class RelaySession
 
     public function onDisconnect(): void
     {
-        $this->turnProcess?->terminate();
+        $this->ended = true;
+        $this->turnGeneration++;
+
         if ($this->turnTimeout) {
             Loop::cancelTimer($this->turnTimeout);
+            $this->turnTimeout = null;
         }
     }
 
@@ -124,7 +131,7 @@ class RelaySession
 
         // Si el interlocutor habla mientras el turno anterior aún procesa,
         // se guarda solo lo último y se atiende al terminar.
-        if ($this->turnProcess !== null) {
+        if ($this->turnActive) {
             $this->pendingPrompt = $text;
 
             return;
@@ -134,105 +141,90 @@ class RelaySession
         $this->runTurn($text);
     }
 
-    /**
-     * Ejecuta el turno en un proceso hijo y reenvía su salida NDJSON:
-     * tokens de texto en vivo hacia el TTS y el cierre del turno al final.
-     */
     protected function runTurn(string $text): void
     {
-        $php = escapeshellarg(PHP_BINARY);
-        $artisan = escapeshellarg(base_path('artisan'));
-        $sessionUuid = escapeshellarg($this->session->uuid);
-
-        $process = new Process("exec {$php} {$artisan} crm:relay-turn {$sessionUuid}", base_path());
-        $this->turnProcess = $process;
-        $process->start();
-
-        $process->stdin->write(json_encode(['message' => $text], JSON_UNESCAPED_UNICODE));
-        $process->stdin->end();
-
-        $stdout = '';
-        $streamedAnything = false;
+        $this->turnActive = true;
+        $generation = ++$this->turnGeneration;
         $spawnedAt = microtime(true);
+        $streamedAnything = false;
 
-        $process->stdout->on('data', function (string $chunk) use (&$stdout, &$streamedAnything, $spawnedAt) {
-            $stdout .= $chunk;
+        $this->turnTimeout = Loop::addTimer(self::TURN_TIMEOUT, function () use ($generation) {
+            if ($generation !== $this->turnGeneration || $this->ended) {
+                return;
+            }
+            ($this->log)('turn-timeout');
+            $this->turnGeneration++; // invalida eventos tardíos del worker
+            $this->turnActive = false;
+            $this->sayFinal('Disculpe la demora. ¿Me lo puede repetir por favor?');
+        });
 
-            while (($pos = strpos($stdout, "\n")) !== false) {
-                $line = substr($stdout, 0, $pos);
-                $stdout = substr($stdout, $pos + 1);
-                $event = json_decode($line, true);
+        $this->pool->dispatch($this->session->uuid, $text, function (array $event) use ($generation, $spawnedAt, &$streamedAnything) {
+            if ($generation !== $this->turnGeneration || $this->ended) {
+                return; // turno expirado o llamada terminada
+            }
 
-                if (! is_array($event)) {
-                    continue;
-                }
-
-                if ($event['e'] === 'token') {
+            switch ($event['e']) {
+                case 'token':
                     if (! $streamedAnything) {
-                        ($this->log)(sprintf('primer token a %.2fs del spawn', microtime(true) - $spawnedAt));
+                        ($this->log)(sprintf('primer token a %.2fs', microtime(true) - $spawnedAt));
                     }
                     $streamedAnything = true;
                     ($this->send)(['type' => 'text', 'token' => $event['t'], 'last' => false]);
-                } elseif ($event['e'] === 'boot') {
-                    ($this->log)(sprintf('boot hijo %dms (spawn→boot %.2fs)', $event['ms'], microtime(true) - $spawnedAt));
-                } elseif ($event['e'] === 'llm-start') {
-                    ($this->log)(sprintf('llm-start a %dms del boot (spawn→llm %.2fs)', $event['ms'], microtime(true) - $spawnedAt));
-                } elseif ($event['e'] === 'done') {
-                    $this->finishTurn($event, $streamedAnything);
-                } elseif ($event['e'] === 'error') {
-                    ($this->log)("turn-error: {$event['message']}");
+                    break;
+
+                case 'done':
+                    $this->completeTurn($event, $streamedAnything);
+                    break;
+
+                case 'error':
+                    ($this->log)('turn-error: '.($event['message'] ?? '?'));
+                    $this->completeTurn(null, $streamedAnything);
                     $this->sayFinal('Disculpe, ¿me lo puede repetir por favor?');
-                }
+                    break;
             }
-        });
-
-        $process->stderr->on('data', fn (string $chunk) => ($this->log)('turn-stderr: '.trim($chunk)));
-
-        $process->on('exit', function () {
-            $this->turnProcess = null;
-
-            if ($this->turnTimeout) {
-                Loop::cancelTimer($this->turnTimeout);
-                $this->turnTimeout = null;
-            }
-
-            // Atender lo que el interlocutor dijo mientras procesábamos.
-            if ($this->pendingPrompt !== null && ! $this->ended) {
-                $pending = $this->pendingPrompt;
-                $this->pendingPrompt = null;
-                ($this->log)("deudor (en espera): {$pending}");
-                $this->runTurn($pending);
-            }
-        });
-
-        $this->turnTimeout = Loop::addTimer(self::TURN_TIMEOUT, function () use ($process) {
-            ($this->log)('turn-timeout: matando proceso');
-            $process->terminate();
-            $this->sayFinal('Disculpe la demora. ¿Me lo puede repetir por favor?');
         });
     }
 
-    protected function finishTurn(array $event, bool $streamedAnything): void
+    protected function completeTurn(?array $event, bool $streamedAnything): void
     {
-        $reply = (string) ($event['reply'] ?? '');
-        $streamed = (int) ($event['streamed'] ?? 0);
+        $this->turnActive = false;
 
-        // Texto no streameado (driver sin streaming, o despedida fija del
-        // sistema tras finalizar_llamada): enviarlo completo.
-        if ($reply !== '' && mb_strlen($reply) > $streamed) {
-            $remainder = $streamed > 0 ? mb_substr($reply, $streamed) : $reply;
-            ($this->send)(['type' => 'text', 'token' => $remainder, 'last' => true]);
-        } else {
-            // Cerrar el mensaje en curso para que el TTS pronuncie lo pendiente.
-            ($this->send)(['type' => 'text', 'token' => ($streamedAnything ? '' : ' '), 'last' => true]);
+        if ($this->turnTimeout) {
+            Loop::cancelTimer($this->turnTimeout);
+            $this->turnTimeout = null;
         }
 
-        if ($reply !== '') {
-            ($this->log)("agente: {$reply}");
+        if ($event !== null) {
+            $reply = (string) ($event['reply'] ?? '');
+            $streamed = (int) ($event['streamed'] ?? 0);
+
+            // Texto no streameado (driver sin streaming, o despedida fija del
+            // sistema): enviarlo completo.
+            if ($reply !== '' && mb_strlen($reply) > $streamed) {
+                $remainder = $streamed > 0 ? mb_substr($reply, $streamed) : $reply;
+                ($this->send)(['type' => 'text', 'token' => $remainder, 'last' => true]);
+            } else {
+                // Cerrar el mensaje en curso para que el TTS pronuncie lo pendiente.
+                ($this->send)(['type' => 'text', 'token' => ($streamedAnything ? '' : ' '), 'last' => true]);
+            }
+
+            if ($reply !== '') {
+                ($this->log)("agente: {$reply}");
+            }
+
+            if (! empty($event['finished'])) {
+                $this->hangupAfter(min(12, max(3, (int) ceil(mb_strlen($reply) / 13) + 1)));
+
+                return;
+            }
         }
 
-        if (! empty($event['finished'])) {
-            $this->hangupAfter(min(12, max(3, (int) ceil(mb_strlen($reply) / 13) + 1)));
+        // Atender lo que el interlocutor dijo mientras procesábamos.
+        if ($this->pendingPrompt !== null && ! $this->ended) {
+            $pending = $this->pendingPrompt;
+            $this->pendingPrompt = null;
+            ($this->log)("deudor (en espera): {$pending}");
+            $this->runTurn($pending);
         }
     }
 

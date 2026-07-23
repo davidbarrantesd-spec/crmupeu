@@ -105,9 +105,16 @@ class AiConversationService
 
             $session->refresh();
             if ($session->status === 'completed') {
-                $farewell = $session->promptVersion?->farewell_message;
-                $reply = $farewell ?: 'Gracias por su tiempo. Que tenga un buen día.';
-                $messages[] = ['role' => 'assistant', 'content' => $reply];
+                // Si el modelo ya se despidió en este mismo turno, no añadir la
+                // despedida fija encima (el deudor la escuchaba dos veces).
+                $modelText = trim((string) ($response['content'] ?? ''));
+
+                if ($modelText !== '') {
+                    $reply = $modelText;
+                } else {
+                    $reply = $session->promptVersion?->farewell_message ?: 'Gracias por su tiempo. Que tenga un buen día.';
+                    $messages[] = ['role' => 'assistant', 'content' => $reply];
+                }
                 break;
             }
         }
@@ -170,6 +177,22 @@ class AiConversationService
             ? "Estás llamando a {$contact->full_name}".($contact->city ? " de {$contact->city}" : '').'.'
             : 'Estás en una conversación de prueba.';
 
+        // Sin la fecha actual el agente no puede resolver "mañana" o "fin de
+        // mes" y termina preguntándole la fecha al deudor (detectado en
+        // auditoría de llamada real).
+        $now = now('America/Lima')->locale('es');
+        $dateContext = 'FECHA Y HORA ACTUAL: '.ucfirst($now->translatedFormat('l j \d\e F \d\e Y, g:i a')).' (hora de Lima, Perú). '
+            .'Usa esta fecha para interpretar expresiones como "mañana", "pasado mañana", "este viernes" o "fin de mes" — nunca le preguntes al interlocutor qué fecha es.';
+
+        // Reglas de validación según los datos disponibles: anunciar una
+        // verificación y no preguntar nada suena falso (auditoría).
+        $identityRules = null;
+        if ($contact) {
+            $identityRules = $contact->dni
+                ? 'VALIDACIÓN DE IDENTIDAD: antes de revelar datos de deuda pide los últimos 3 dígitos del DNI y compáralos con «'.substr($contact->dni, -3).'». Si no coinciden, despídete cortésmente sin revelar nada.'
+                : 'VALIDACIÓN DE IDENTIDAD: antes de revelar datos de deuda pide al interlocutor que confirme su nombre completo. No anuncies verificaciones que no vas a hacer.';
+        }
+
         // Deudas precargadas: evita una ronda completa de LLM + herramienta a
         // mitad de la llamada (la mayor fuente de silencios). Solo se revelan
         // tras validar identidad, como exigen las reglas.
@@ -184,7 +207,18 @@ class AiConversationService
             if ($debts->isNotEmpty()) {
                 $lines = $debts->map(fn ($d) => "- {$d->concept}: {$d->currency} ".number_format((float) $d->pending_balance, 2)
                     .", venció el {$d->due_date?->format('d/m/Y')}")->implode("\n");
-                $debtContext = "DEUDA DEL CONTACTO (dato confirmado del sistema, no necesitas consultar_deuda):\n{$lines}";
+
+                // Total real (no solo las 3 listadas): la pregunta "¿y mi deuda
+                // total?" apareció en la primera llamada real.
+                $totalByCurrency = $contact->debts()
+                    ->whereIn('status', ['pending', 'overdue', 'partial'])
+                    ->selectRaw('currency, sum(pending_balance) as total, count(*) as n')
+                    ->groupBy('currency')->get()
+                    ->map(fn ($t) => "{$t->currency} ".number_format((float) $t->total, 2)." ({$t->n} ".($t->n == 1 ? 'deuda' : 'deudas').')')
+                    ->implode(' + ');
+
+                $debtContext = "DEUDA DEL CONTACTO (dato confirmado del sistema, no necesitas consultar_deuda):\n{$lines}"
+                    ."\nDEUDA TOTAL PENDIENTE: {$totalByCurrency}. Si te preguntan por el total, usa esta cifra.";
             }
         }
 
@@ -203,6 +237,8 @@ class AiConversationService
             $version->system_prompt,
             $version->instructions ? "INSTRUCCIONES:\n{$version->instructions}" : null,
             "CONTEXTO: {$context}",
+            $dateContext,
+            $identityRules,
             $debtContext,
             $voiceRules,
             "REGLAS OBLIGATORIAS:\n"
