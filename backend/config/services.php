@@ -41,6 +41,8 @@ return [
         'phone_number' => env('TWILIO_PHONE_NUMBER'),
         'whatsapp_from' => env('TWILIO_WHATSAPP_FROM'),
         'validate_signature' => env('TWILIO_VALIDATE_SIGNATURE', true),
+        // URL pública wss:// del servidor crm:relay (voz conversacional IA).
+        'relay_url' => env('CONVERSATION_RELAY_URL'),
     ],
 
     'telephony' => [

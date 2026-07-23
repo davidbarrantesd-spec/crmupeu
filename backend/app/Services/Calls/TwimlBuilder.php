@@ -70,8 +70,9 @@ class TwimlBuilder
     }
 
     /**
-     * En producción usa Twilio ConversationRelay (WebSocket bidireccional con el agente IA).
-     * El endpoint relay corre en el mismo backend (routes/api → AiConversationController).
+     * Twilio ConversationRelay: WebSocket bidireccional con el agente IA
+     * (servidor dedicado `php artisan crm:relay`, ver RelayServerCommand).
+     * El token HMAC de la URL impide que cualquiera abra conversaciones.
      */
     protected function aiConversational(Call $call): string
     {
@@ -80,10 +81,25 @@ class TwimlBuilder
             $call->promptVersion?->greeting_message ?? 'Buenos días, le saluda la asistente virtual de cobranzas.'
         );
 
-        $wsUrl = str_replace(['http://', 'https://'], ['ws://', 'wss://'], config('app.url')).'/api/v1/ai/relay/'.$call->uuid;
+        $base = rtrim(
+            config('services.twilio.relay_url')
+                ?: str_replace(['http://', 'https://'], ['ws://', 'wss://'], config('app.url')),
+            '/'
+        );
+        $token = hash_hmac('sha256', $call->uuid, config('app.key'));
+        $wsUrl = "{$base}/relay/{$call->uuid}?token={$token}";
+
+        // Voz latina neutra por defecto; la campaña puede definir otra
+        // (formato ConversationRelay, sin el prefijo "Polly." de <Say>).
+        $voice = str_replace('Polly.', '', $call->campaign?->voice ?: 'Lupe-Generative');
 
         return $this->document(
-            '<Connect><ConversationRelay url="'.e($wsUrl).'" welcomeGreeting="'.e($greeting).'" language="es-MX" transcriptionProvider="google"/></Connect>'
+            '<Connect><ConversationRelay url="'.e($wsUrl).'"'
+            .' welcomeGreeting="'.e($greeting).'"'
+            .' language="es-US" ttsProvider="Amazon" voice="'.e($voice).'"'
+            .' transcriptionProvider="Google" transcriptionLanguage="es-US">'
+            .'<Parameter name="greeting" value="'.e($greeting).'"/>'
+            .'</ConversationRelay></Connect>'
         );
     }
 
