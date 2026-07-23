@@ -44,10 +44,14 @@ class RelayTurnCommand extends Command
         $streamed = '';
 
         try {
+            // En voz manda la latencia: VOICE_LLM_MODEL permite usar un modelo
+            // más rápido (p.ej. Haiku) solo para llamadas, sin tocar el resto.
+            $llmOptions = array_filter(['model' => env('VOICE_LLM_MODEL')]);
+
             $result = $ai->turn($session, $message, function (string $chunk) use (&$streamed) {
                 $streamed .= $chunk;
                 $this->emit(['e' => 'token', 't' => $chunk]);
-            });
+            }, $llmOptions);
 
             $this->emit([
                 'e' => 'done',

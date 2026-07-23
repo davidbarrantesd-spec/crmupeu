@@ -42,9 +42,12 @@ class AiConversationService
      * $onText (opcional, voz en vivo): recibe cada fragmento de texto apenas
      * el LLM lo genera, para que el TTS hable sin esperar el turno completo.
      *
+     * $llmOptions permite ajustar el LLM para el canal (p.ej. un modelo más
+     * rápido para voz en vivo, donde la latencia manda sobre el matiz).
+     *
      * @return array{reply: ?string, tool_calls: array, finished: bool, structured_result: ?array}
      */
-    public function turn(AiSession $session, ?string $userMessage, ?callable $onText = null): array
+    public function turn(AiSession $session, ?string $userMessage, ?callable $onText = null, array $llmOptions = []): array
     {
         $messages = $session->messages ?? [];
 
@@ -58,10 +61,10 @@ class AiConversationService
         // Entre rondas de tools el modelo retoma el texto sin separador; el
         // espacio evita que el TTS pronuncie dos frases pegadas.
         $anyText = false;
-        $options = $onText ? ['on_text' => function (string $chunk) use (&$anyText, $onText) {
+        $options = $llmOptions + ($onText ? ['on_text' => function (string $chunk) use (&$anyText, $onText) {
             $anyText = true;
             $onText($chunk);
-        }] : [];
+        }] : []);
 
         $allToolCalls = [];
         $reply = null;
