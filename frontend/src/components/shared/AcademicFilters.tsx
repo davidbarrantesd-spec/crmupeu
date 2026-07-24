@@ -1,6 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAcademicCatalogs, modalityLabel, enrollmentLabel } from '@/hooks/useAcademicCatalogs'
 import { segmentLabel } from '@/components/shared/SegmentBadge'
+import { behaviorLabel } from '@/components/shared/BehaviorBadge'
 
 const ANY = '__any__'
 
@@ -12,6 +13,7 @@ export interface AcademicFilterValues {
   modality?: string
   enrollment_status?: string
   payment_segment?: string
+  payment_behavior?: string
   academic_period?: string
 }
 
@@ -35,6 +37,7 @@ export function academicFilterParams(value: AcademicFilterValues): Record<string
     modality: value.modality || undefined,
     enrollment_status: value.enrollment_status || undefined,
     payment_segment: value.payment_segment || undefined,
+    payment_behavior: value.payment_behavior || undefined,
     academic_period: value.academic_period || undefined,
   }
 }
@@ -151,6 +154,21 @@ export function AcademicFilters({ value, onChange, fields }: AcademicFiltersProp
           {catalogs.segments.map((s) => (
             <SelectItem key={s.key} value={s.key}>
               {s.label || segmentLabel(s.key)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    ),
+    payment_behavior: () => (
+      <Select key="behavior" value={value.payment_behavior || ANY} onValueChange={(v) => set('payment_behavior', v)}>
+        <SelectTrigger className="w-44">
+          <SelectValue placeholder="Comportamiento" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ANY}>Todo comportamiento</SelectItem>
+          {catalogs.behaviors.map((b) => (
+            <SelectItem key={b.key} value={b.key}>
+              {b.label || behaviorLabel(b.key)}
             </SelectItem>
           ))}
         </SelectContent>

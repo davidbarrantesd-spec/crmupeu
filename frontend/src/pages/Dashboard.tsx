@@ -25,6 +25,7 @@ import {
   Building2,
   AlertTriangle,
   Scale,
+  Gauge,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -47,13 +48,15 @@ import { api } from '@/api/client'
 import { formatMoney, formatNumber, formatPercent, formatDate } from '@/lib/format'
 import { statusLabel } from '@/components/shared/StatusBadge'
 import { SegmentBadge, segmentLabel } from '@/components/shared/SegmentBadge'
+import { BehaviorBadge, behaviorLabel, behaviorSoftBg } from '@/components/shared/BehaviorBadge'
+import { ScoreIndicator, scoreBarClass } from '@/components/shared/ScoreIndicator'
 import {
   AcademicFilters,
   academicFilterParams,
   hasAcademicFilters,
   type AcademicFilterValues,
 } from '@/components/shared/AcademicFilters'
-import type { AcademicDashboard, ApiResource, DashboardData } from '@/types'
+import type { AcademicDashboard, ApiResource, BehaviorByYearStat, CareerScoreStat, DashboardData } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
@@ -374,6 +377,77 @@ function AcademicSection() {
           ))}
       </div>
 
+      {/* Comportamiento de pago */}
+      <div className="mt-6">
+        <h3 className="flex items-center gap-2 text-base font-semibold">
+          <Gauge className="h-4 w-4 text-primary" />
+          Comportamiento de pago
+        </h3>
+        <p className="text-sm text-muted-foreground">Hábitos de pago de los estudiantes a lo largo de su carrera</p>
+
+        {/* Tarjetas por comportamiento + score promedio */}
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {isLoading && Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+          {!isLoading && data && (
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs font-medium text-muted-foreground">Score promedio</p>
+                <div className="mt-2">
+                  <ScoreIndicator score={data.kpis.avg_score} size="lg" />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {!isLoading &&
+            (data?.by_behavior ?? []).map((b) => (
+              <button
+                key={b.behavior}
+                type="button"
+                className="cursor-pointer rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent"
+                onClick={() => navigate(`/contacts?payment_behavior=${encodeURIComponent(b.behavior)}`)}
+                title={`Ver contactos con comportamiento ${b.label || behaviorLabel(b.behavior)}`}
+              >
+                <BehaviorBadge behavior={b.behavior} />
+                <p className="mt-2 text-xl font-bold tabular-nums">{formatNumber(b.count)}</p>
+                <p className="text-xs text-muted-foreground tabular-nums">{formatMoney(b.amount)}</p>
+              </button>
+            ))}
+        </div>
+
+        {/* Matriz comportamiento × año + cultura de pago por carrera */}
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">¿Cómo pagan según su año de carrera?</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 pb-0">
+              {isLoading ? (
+                <Skeleton className="mx-6 mb-6 h-[240px]" />
+              ) : !data?.behavior_by_year?.length ? (
+                <EmptyState title="Sin datos" description="No hay información para los filtros seleccionados." className="h-[240px] py-0" />
+              ) : (
+                <BehaviorByYearMatrix rows={data.behavior_by_year} />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Cultura de pago por carrera</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-[240px] w-full" />
+              ) : !data?.score_by_career?.length ? (
+                <EmptyState title="Sin datos" description="No hay información para los filtros seleccionados." className="h-[240px] py-0" />
+              ) : (
+                <CareerScoreLists careers={data.score_by_career} />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {/* Gráficos por campus / facultad */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard title="Deuda por campus" loading={isLoading} empty={!data?.by_campus?.length}>
@@ -468,6 +542,109 @@ function AcademicSection() {
         </ChartCard>
       </div>
     </section>
+  )
+}
+
+/** Orden canónico de los comportamientos en la matriz. */
+const BEHAVIOR_ORDER = ['puntual', 'demora_leve', 'demora_cronica', 'fin_de_ciclo', 'sin_historial']
+
+const YEARS = [1, 2, 3, 4, 5]
+
+function BehaviorByYearMatrix({ rows }: { rows: BehaviorByYearStat[] }) {
+  const orderIdx = (b: string) => {
+    const i = BEHAVIOR_ORDER.indexOf(b)
+    return i === -1 ? BEHAVIOR_ORDER.length : i
+  }
+  const behaviors = Array.from(new Set(rows.map((r) => r.payment_behavior))).sort((a, b) => orderIdx(a) - orderIdx(b))
+  const cell = (behavior: string, year: number) =>
+    rows.find((r) => r.payment_behavior === behavior && Number(r.year) === year)
+
+  return (
+    <div className="overflow-x-auto pb-2">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Comportamiento</TableHead>
+            {YEARS.map((y) => (
+              <TableHead key={y} className="text-center">
+                Año {y}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {behaviors.map((b) => (
+            <TableRow key={b}>
+              <TableCell>
+                <BehaviorBadge behavior={b} />
+              </TableCell>
+              {YEARS.map((y) => {
+                const c = cell(b, y)
+                return (
+                  <TableCell
+                    key={y}
+                    className={`text-center ${c ? behaviorSoftBg(b) : ''}`}
+                    title={c ? `${behaviorLabel(b)} · Año ${y}: ${formatNumber(c.count)} estudiantes · score promedio ${c.avg_score}` : undefined}
+                  >
+                    {c ? (
+                      <>
+                        <span className="font-semibold tabular-nums">{formatNumber(c.count)}</span>
+                        <span className="ml-1 text-[10px] text-muted-foreground tabular-nums">({c.avg_score})</span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                )
+              })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function CareerScoreLists({ careers }: { careers: CareerScoreStat[] }) {
+  // score_by_career viene ordenado de mejor a peor score
+  const best = careers.slice(0, 5)
+  const worst = careers.length > 5 ? careers.slice(-5).reverse() : []
+
+  return (
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <CareerScoreList title="Top 5 mejores" careers={best} />
+      <CareerScoreList title="Top 5 peores" careers={worst} />
+    </div>
+  )
+}
+
+function CareerScoreList({ title, careers }: { title: string; careers: CareerScoreStat[] }) {
+  return (
+    <div>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      {!careers.length && <p className="text-sm text-muted-foreground">Sin datos</p>}
+      <div className="space-y-3">
+        {careers.map((c) => (
+          <div key={c.name}>
+            <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+              <span className="truncate font-medium" title={c.name}>
+                {c.name}
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <ScoreIndicator score={c.avg_score} size="sm" />
+                <span className="text-xs text-muted-foreground tabular-nums">{formatNumber(c.students)} est.</span>
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={`h-full rounded-full ${scoreBarClass(c.avg_score)}`}
+                style={{ width: `${Math.max(0, Math.min(100, c.avg_score))}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 

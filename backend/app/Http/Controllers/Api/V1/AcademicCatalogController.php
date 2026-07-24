@@ -34,6 +34,8 @@ class AcademicCatalogController extends Controller
                 ->distinct()->orderByDesc('academic_period')->pluck('academic_period'),
             'segments' => collect(self::SEGMENTS)
                 ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
+            'behaviors' => collect(\App\Services\Reports\PaymentBehaviorService::BEHAVIORS)
+                ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
         ]]);
     }
 }

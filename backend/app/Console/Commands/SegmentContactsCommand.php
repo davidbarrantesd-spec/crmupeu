@@ -28,7 +28,7 @@ class SegmentContactsCommand extends Command
     /** Días de gracia tras el vencimiento antes de considerar un pago "tardío". */
     protected const LATE_GRACE_DAYS = 15;
 
-    public function handle(): int
+    public function handle(\App\Services\Reports\PaymentBehaviorService $behavior): int
     {
         $updated = 0;
         $currentPeriod = self::currentPeriod();
@@ -36,14 +36,19 @@ class SegmentContactsCommand extends Command
         Contact::query()
             ->whereHas('debts')
             ->with(['debts' => fn ($q) => $q->select(
-                'id', 'contact_id', 'status', 'pending_balance', 'due_date', 'paid_at', 'academic_period'
+                'id', 'contact_id', 'status', 'pending_balance', 'original_amount', 'due_date', 'paid_at', 'academic_period'
             )])
-            ->chunkById((int) $this->option('chunk'), function ($contacts) use (&$updated, $currentPeriod) {
+            ->chunkById((int) $this->option('chunk'), function ($contacts) use (&$updated, $currentPeriod, $behavior) {
                 foreach ($contacts as $contact) {
                     $segment = $this->classify($contact, $currentPeriod);
+                    $profile = $behavior->profile($contact);
 
-                    if ($contact->payment_segment !== $segment) {
-                        $contact->updateQuietly([
+                    $changed = $contact->payment_segment !== $segment
+                        || $contact->payment_behavior !== $profile['payment_behavior']
+                        || (int) $contact->payment_score !== (int) $profile['payment_score'];
+
+                    if ($changed) {
+                        $contact->updateQuietly($profile + [
                             'payment_segment' => $segment,
                             'payment_segment_updated_at' => now(),
                         ]);
@@ -52,7 +57,7 @@ class SegmentContactsCommand extends Command
                 }
             });
 
-        $this->info("Segmentos recalculados; {$updated} contactos actualizados.");
+        $this->info("Segmentos y comportamiento recalculados; {$updated} contactos actualizados.");
 
         return self::SUCCESS;
     }

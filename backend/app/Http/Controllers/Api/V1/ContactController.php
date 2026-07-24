@@ -42,6 +42,9 @@ class ContactController extends Controller
             ->when($request->modality, fn ($q, $v) => $q->where('modality', $v))
             ->when($request->enrollment_status, fn ($q, $v) => $q->where('enrollment_status', $v))
             ->when($request->payment_segment, fn ($q, $v) => $q->where('payment_segment', $v))
+            ->when($request->payment_behavior, fn ($q, $v) => $q->where('payment_behavior', $v))
+            ->when($request->min_score, fn ($q, $v) => $q->where('payment_score', '>=', (int) $v))
+            ->when($request->max_score, fn ($q, $v) => $q->where('payment_score', '<=', (int) $v))
             ->when($request->academic_period, fn ($q, $v) => $q->whereHas('debts', fn ($q2) => $q2->where('academic_period', $v)))
             ->when(
                 $request->get('sort') === 'total_debt',
@@ -76,7 +79,9 @@ class ContactController extends Controller
     {
         $this->assertInScope($contact);
 
-        return new ContactResource($contact->load(['tags', 'debts', 'campus', 'faculty', 'career', 'academicLevel']));
+        $contact->load(['tags', 'debts', 'campus', 'faculty', 'career', 'academicLevel']);
+
+        return (new ContactResource($contact))->additional(['payment_timeline' => app(\App\Services\Reports\PaymentBehaviorService::class)->timeline($contact)]);
     }
 
     /** Restricción dura de alcance también en accesos directos por uuid. */

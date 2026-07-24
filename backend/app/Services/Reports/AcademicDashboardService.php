@@ -36,38 +36,33 @@ class AcademicDashboardService
                 coalesce(sum(debts.pending_balance) filter (where debts.due_date < now()), 0) as total_overdue
             ')->first();
 
-        $bySegment = Contact::query()
+        // Agregados por segmento y por comportamiento en SQL puro (escala a
+        // 15k+ estudiantes sin cargar filas a memoria): conteo desde contacts,
+        // montos pendientes desde debts en una sola pasada cada uno.
+        $bySegment = $this->groupedByContactField($user, 'payment_segment', AcademicCatalogController::SEGMENTS, 'segment');
+        $byBehavior = $this->groupedByContactField($user, 'payment_behavior', \App\Services\Reports\PaymentBehaviorService::BEHAVIORS, 'behavior');
+
+        // Matriz comportamiento × año de carrera: "los de 4to año ya se sabe
+        // cómo pagan". Año ≈ ceil(ciclos con actividad / 2).
+        $behaviorByYear = Contact::query()
             ->visibleTo($user)
-            ->whereNotNull('payment_segment')
-            ->withWhereHas('debts', fn ($q) => $q->whereNotIn('status', ['paid', 'cancelled']))
-            ->get()
-            ->groupBy('payment_segment')
-            ->map(fn ($contacts, $segment) => [
-                'segment' => $segment,
-                'label' => AcademicCatalogController::SEGMENTS[$segment] ?? $segment,
-                'count' => $contacts->count(),
-                'amount' => (float) $contacts->sum(fn ($c) => $c->debts
-                    ->whereNotIn('status', ['paid', 'cancelled'])->sum('pending_balance')),
-            ])->values();
+            ->whereNotNull('payment_behavior')
+            ->where('cycles_with_debt', '>', 0)
+            ->groupBy('year', 'payment_behavior')
+            ->selectRaw("least(ceil(cycles_with_debt / 2.0), 5) as year, payment_behavior, count(*) as count, round(avg(payment_score)) as avg_score")
+            ->orderBy('year')
+            ->get();
 
-        // buen_pagador y pagador_tardio no tienen deuda pendiente (se clasifican
-        // por historial): contarlos aparte para que sus tarjetas no desaparezcan.
-        foreach (['buen_pagador', 'pagador_tardio'] as $historical) {
-            if ($bySegment->contains(fn ($s) => $s['segment'] === $historical)) {
-                continue;
-            }
-
-            $count = Contact::visibleTo($user)->where('payment_segment', $historical)->count();
-
-            if ($count > 0) {
-                $bySegment->push([
-                    'segment' => $historical,
-                    'label' => AcademicCatalogController::SEGMENTS[$historical],
-                    'count' => $count,
-                    'amount' => 0.0,
-                ]);
-            }
-        }
+        // Carreras con mejor y peor cultura de pago (score promedio).
+        $scoreByCareer = Contact::query()
+            ->visibleTo($user)
+            ->whereNotNull('payment_score')
+            ->join('careers', 'careers.id', '=', 'contacts.career_id')
+            ->groupBy('careers.name')
+            ->havingRaw('count(*) >= 3')
+            ->selectRaw('careers.name, round(avg(payment_score)) as avg_score, count(*) as students')
+            ->orderByDesc('avg_score')
+            ->get();
 
         $byGroup = fn (string $table, string $fk) => (clone $pending)
             ->join('contacts', 'contacts.id', '=', 'debts.contact_id')
@@ -131,13 +126,51 @@ class AcademicDashboardService
                 'total_pending' => $totalPending,
                 'total_overdue' => (float) ($kpis->total_overdue ?? 0),
                 'avg_debt' => $studentsWithDebt > 0 ? round($totalPending / $studentsWithDebt, 2) : 0,
+                'avg_score' => (int) (Contact::visibleTo($user)->whereNotNull('payment_score')->avg('payment_score') ?? 0),
             ],
             'by_segment' => $bySegment,
+            'by_behavior' => $byBehavior,
+            'behavior_by_year' => $behaviorByYear,
+            'score_by_career' => $scoreByCareer,
             'by_campus' => $byGroup('campuses', 'campus_id')->get(),
             'by_faculty' => $byGroup('faculties', 'faculty_id')->get(),
             'top_careers' => $topCareers,
             'by_period' => $byPeriod,
             'top_debtors' => $topDebtors,
         ];
+    }
+
+    /**
+     * Conteo + monto pendiente agrupado por una columna de contacts, en dos
+     * consultas agregadas (sin traer filas): apto para decenas de miles.
+     *
+     * @param  array<string, string>  $labels
+     */
+    protected function groupedByContactField(?User $user, string $field, array $labels, string $key): \Illuminate\Support\Collection
+    {
+        $counts = Contact::visibleTo($user)
+            ->whereNotNull($field)
+            ->groupBy($field)
+            ->selectRaw("{$field} as k, count(*) as count")
+            ->pluck('count', 'k');
+
+        $amounts = Contact::visibleTo($user)
+            ->whereNotNull($field)
+            ->join('debts', fn ($j) => $j->on('debts.contact_id', '=', 'contacts.id')
+                ->whereNull('debts.deleted_at')
+                ->whereNotIn('debts.status', ['paid', 'cancelled']))
+            ->groupBy($field)
+            ->selectRaw("contacts.{$field} as k, sum(debts.pending_balance) as amount")
+            ->pluck('amount', 'k');
+
+        return collect($labels)
+            ->map(fn ($label, $value) => [
+                $key => $value,
+                'label' => $label,
+                'count' => (int) ($counts[$value] ?? 0),
+                'amount' => (float) ($amounts[$value] ?? 0),
+            ])
+            ->filter(fn ($row) => $row['count'] > 0)
+            ->values();
     }
 }

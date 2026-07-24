@@ -88,6 +88,11 @@ export interface PaymentSegmentDef {
   label: string
 }
 
+export interface PaymentBehaviorDef {
+  key: string
+  label: string
+}
+
 export interface AcademicCatalogs {
   campuses: Campus[]
   faculties: Faculty[]
@@ -95,9 +100,24 @@ export interface AcademicCatalogs {
   modalities: string[]
   periods: string[]
   segments: PaymentSegmentDef[]
+  behaviors: PaymentBehaviorDef[]
 }
 
 export type EnrollmentStatus = 'matriculado' | 'no_matriculado'
+
+export type PaymentTrend = 'mejorando' | 'estable' | 'empeorando'
+
+export type PaymentTimelineStatus = 'a_tiempo' | 'tarde' | 'pendiente' | 'vencido'
+
+/** Historia de pago ciclo a ciclo de un contacto (viene al mismo nivel que `data` en GET /contacts/{uuid}). */
+export interface PaymentTimelineEntry {
+  period: string
+  debts: number
+  amount: number
+  pending: number
+  status: PaymentTimelineStatus
+  avg_delay: number
+}
 
 export interface Debt {
   uuid: string
@@ -148,6 +168,14 @@ export interface Contact {
   modality?: string | null
   enrollment_status?: EnrollmentStatus | string | null
   payment_segment?: string | null
+  // Perfil de comportamiento de pago
+  payment_behavior?: string | null
+  payment_score?: number | null
+  on_time_rate?: number | null
+  avg_delay_days?: number | null
+  end_of_cycle_rate?: number | null
+  cycles_with_debt?: number
+  payment_trend?: PaymentTrend | null
   total_pending?: number | string | null
   call_consent?: boolean
   whatsapp_consent?: boolean
@@ -215,6 +243,7 @@ export interface SegmentFilters {
   modality?: string[]
   enrollment_status?: string[]
   payment_segment?: string[]
+  payment_behavior?: string[]
   academic_period?: string[]
 }
 
@@ -225,6 +254,7 @@ export interface AcademicDashboardKpis {
   total_pending: number | string
   total_overdue: number | string
   avg_debt: number | string
+  avg_score: number
 }
 
 export interface AcademicSegmentStat {
@@ -263,6 +293,26 @@ export interface TopDebtor {
   payment_segment?: string | null
 }
 
+export interface AcademicBehaviorStat {
+  behavior: string
+  label: string
+  count: number
+  amount: number | string
+}
+
+export interface BehaviorByYearStat {
+  year: number
+  payment_behavior: string
+  count: number
+  avg_score: number
+}
+
+export interface CareerScoreStat {
+  name: string
+  avg_score: number
+  students: number
+}
+
 export interface AcademicDashboard {
   kpis: AcademicDashboardKpis
   by_segment: AcademicSegmentStat[]
@@ -271,6 +321,9 @@ export interface AcademicDashboard {
   top_careers: AcademicCareerStat[]
   by_period: AcademicPeriodStat[]
   top_debtors: TopDebtor[]
+  by_behavior: AcademicBehaviorStat[]
+  behavior_by_year: BehaviorByYearStat[]
+  score_by_career: CareerScoreStat[]
 }
 
 export interface DtmfOption {

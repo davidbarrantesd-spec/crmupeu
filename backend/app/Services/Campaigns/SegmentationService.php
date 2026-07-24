@@ -43,7 +43,7 @@ class SegmentationService
                 $query->whereIn($field, (array) $filters[$field]);
             }
         }
-        foreach (['modality', 'enrollment_status', 'payment_segment'] as $field) {
+        foreach (['modality', 'enrollment_status', 'payment_segment', 'payment_behavior'] as $field) {
             if (! empty($filters[$field])) {
                 $query->whereIn($field, (array) $filters[$field]);
             }

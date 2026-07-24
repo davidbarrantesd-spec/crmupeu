@@ -22,6 +22,7 @@ import {
 import { api, apiErrorMessage } from '@/api/client'
 import { useAcademicCatalogs, modalityLabel, enrollmentLabel } from '@/hooks/useAcademicCatalogs'
 import { segmentLabel } from '@/components/shared/SegmentBadge'
+import { behaviorLabel } from '@/components/shared/BehaviorBadge'
 import { formatMoney, fullName } from '@/lib/format'
 import type { ApiResource, Campaign, Paginated, Prompt, SegmentPreview, WhatsAppTemplate } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -74,6 +75,7 @@ const schema = z.object({
   modalities: z.array(z.string()),
   enrollment_statuses: z.array(z.string()),
   payment_segments: z.array(z.string()),
+  payment_behaviors: z.array(z.string()),
   // Paso 3 — contenido
   tts_message: z.string().optional(),
   audio_url: z.string().optional(),
@@ -158,6 +160,7 @@ export default function CampaignWizard() {
       modalities: [],
       enrollment_statuses: [],
       payment_segments: [],
+      payment_behaviors: [],
       dtmf_1_action: 'confirm',
       dtmf_2_action: 'send_whatsapp',
       dtmf_3_action: 'transfer_advisor',
@@ -223,6 +226,7 @@ export default function CampaignWizard() {
       modalities: sf.modality ?? [],
       enrollment_statuses: sf.enrollment_status ?? [],
       payment_segments: sf.payment_segment ?? [],
+      payment_behaviors: sf.payment_behavior ?? [],
       tts_message: existing.tts_message ?? '',
       audio_url: existing.audio_url ?? '',
       dtmf_1_action: dtmfEntry('1')?.action ?? 'confirm',
@@ -285,6 +289,7 @@ export default function CampaignWizard() {
       modality: values.modalities,
       enrollment_status: values.enrollment_statuses,
       payment_segment: values.payment_segments,
+      payment_behavior: values.payment_behaviors,
     }
   }
 
@@ -791,6 +796,26 @@ export default function CampaignWizard() {
                             }
                           />
                           {s.label || segmentLabel(s.key)}
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                  <FormField label="Comportamiento de pago" className="sm:col-span-3">
+                    <div className="flex flex-wrap gap-3 pt-1.5">
+                      {catalogs.behaviors.map((b) => (
+                        <label key={b.key} className="flex cursor-pointer items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={values.payment_behaviors.includes(b.key)}
+                            onCheckedChange={(checked) =>
+                              form.setValue(
+                                'payment_behaviors',
+                                checked
+                                  ? [...values.payment_behaviors, b.key]
+                                  : values.payment_behaviors.filter((x) => x !== b.key),
+                              )
+                            }
+                          />
+                          {b.label || behaviorLabel(b.key)}
                         </label>
                       ))}
                     </div>

@@ -9,6 +9,7 @@ const EMPTY: AcademicCatalogs = {
   modalities: [],
   periods: [],
   segments: [],
+  behaviors: [],
 }
 
 /** Etiquetas legibles para las modalidades del catálogo. */

@@ -39,6 +39,7 @@ import { FilterBar } from '@/components/shared/FilterBar'
 import { DataTable, type Column } from '@/components/shared/DataTable'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { SegmentBadge } from '@/components/shared/SegmentBadge'
+import { ScoreIndicator } from '@/components/shared/ScoreIndicator'
 import {
   AcademicFilters,
   academicFilterParams,
@@ -67,6 +68,7 @@ export default function Contacts() {
   const [doNotContact, setDoNotContact] = useState(ANY)
   const [academic, setAcademic] = useState<AcademicFilterValues>(() => ({
     payment_segment: searchParams.get('payment_segment') ?? '',
+    payment_behavior: searchParams.get('payment_behavior') ?? '',
     campus_id: searchParams.get('campus_id') ?? '',
     faculty_id: searchParams.get('faculty_id') ?? '',
     career_id: searchParams.get('career_id') ?? '',
@@ -197,14 +199,22 @@ export default function Contacts() {
     {
       key: 'payment_segment',
       header: 'Segmento',
-      render: (c) =>
-        c.payment_segment ? (
-          <SegmentBadge segment={c.payment_segment} />
-        ) : c.segment ? (
-          <Badge variant="secondary">{c.segment}</Badge>
-        ) : (
-          '—'
-        ),
+      render: (c) => (
+        <div>
+          {c.payment_segment ? (
+            <SegmentBadge segment={c.payment_segment} />
+          ) : c.segment ? (
+            <Badge variant="secondary">{c.segment}</Badge>
+          ) : (
+            '—'
+          )}
+          {c.payment_score != null && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Score <ScoreIndicator score={c.payment_score} size="sm" />
+            </p>
+          )}
+        </div>
+      ),
     },
     {
       key: 'tags',
@@ -390,7 +400,7 @@ export default function Contacts() {
         <AcademicFilters
           value={academic}
           onChange={(v) => { setAcademic(v); setPage(1) }}
-          fields={['campus_id', 'faculty_id', 'career_id', 'academic_level_id', 'modality', 'payment_segment', 'enrollment_status']}
+          fields={['campus_id', 'faculty_id', 'career_id', 'academic_level_id', 'modality', 'payment_segment', 'payment_behavior', 'enrollment_status']}
         />
         <Button
           variant={sortByDebt ? 'default' : 'outline'}

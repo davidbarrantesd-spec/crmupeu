@@ -42,6 +42,7 @@ import type {
   Debt,
   FollowUp,
   Paginated,
+  PaymentTimelineEntry,
   TimelineEvent,
 } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -53,6 +54,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { BehaviorBadge } from '@/components/shared/BehaviorBadge'
+import { ScoreIndicator, TrendArrow } from '@/components/shared/ScoreIndicator'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { AudioPlayer } from '@/components/shared/AudioPlayer'
 import { JsonViewer } from '@/components/shared/JsonViewer'
@@ -88,8 +91,9 @@ export default function ContactDetail() {
   const { data: contact, isLoading } = useQuery({
     queryKey: ['contact', uuid],
     queryFn: async () => {
-      const res = await api.get<ApiResource<Contact>>(`/contacts/${uuid}`)
-      return res.data.data
+      // payment_timeline viene al mismo nivel que "data" en la respuesta
+      const res = await api.get<ApiResource<Contact> & { payment_timeline?: PaymentTimelineEntry[] }>(`/contacts/${uuid}`)
+      return { ...res.data.data, payment_timeline: res.data.payment_timeline ?? [] }
     },
     enabled: !!uuid,
   })
@@ -191,6 +195,9 @@ export default function ContactDetail() {
         </div>
       </div>
 
+      {/* Perfil de pago */}
+      <PaymentProfileCard contact={contact} timeline={contact.payment_timeline} />
+
       <Tabs defaultValue="summary">
         <TabsList>
           <TabsTrigger value="summary">Resumen</TabsTrigger>
@@ -239,6 +246,78 @@ export default function ContactDetail() {
       <CallDialog contact={contact} open={callOpen} onOpenChange={setCallOpen} />
       <ContactFormDialog open={editOpen} onOpenChange={setEditOpen} contact={contact} />
     </div>
+  )
+}
+
+const TIMELINE_STATUS_CHIP: Record<PaymentTimelineEntry['status'], string> = {
+  a_tiempo: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300',
+  tarde: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
+  vencido: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+  pendiente: 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300',
+}
+
+const TIMELINE_STATUS_LABEL: Record<PaymentTimelineEntry['status'], string> = {
+  a_tiempo: 'A tiempo',
+  tarde: 'Tarde',
+  vencido: 'Vencido',
+  pendiente: 'Pendiente',
+}
+
+function PaymentProfileCard({ contact, timeline }: { contact: Contact; timeline: PaymentTimelineEntry[] }) {
+  const hasProfile = contact.payment_behavior != null || contact.payment_score != null
+  if (!hasProfile && !timeline.length) return null
+
+  const rate = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v * 100)}%`)
+
+  const metrics: { label: string; value: string }[] = [
+    { label: 'Paga a tiempo', value: rate(contact.on_time_rate) },
+    { label: 'Atraso promedio', value: contact.avg_delay_days == null ? '—' : `${contact.avg_delay_days} días` },
+    { label: 'Paga a fin de ciclo', value: rate(contact.end_of_cycle_rate) },
+    { label: 'Ciclos cursados', value: contact.cycles_with_debt != null ? String(contact.cycles_with_debt) : '—' },
+  ]
+
+  return (
+    <Card className="mb-6">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Perfil de pago</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
+          <div className="flex items-center gap-4">
+            <ScoreIndicator score={contact.payment_score} size="lg" />
+            <div className="flex items-center gap-2">
+              <BehaviorBadge behavior={contact.payment_behavior} />
+              <TrendArrow trend={contact.payment_trend} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
+            {metrics.map((m) => (
+              <div key={m.label}>
+                <p className="text-xs text-muted-foreground">{m.label}</p>
+                <p className="text-sm font-semibold tabular-nums">{m.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {timeline.length > 0 && (
+          <div className="mt-4 border-t pt-4">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Historia de pago por ciclo</p>
+            <div className="flex flex-wrap gap-1.5">
+              {timeline.map((t) => (
+                <span
+                  key={t.period}
+                  className={`inline-flex cursor-default items-center rounded-md px-2 py-1 text-xs font-medium tabular-nums ${TIMELINE_STATUS_CHIP[t.status] ?? 'bg-muted text-muted-foreground'}`}
+                  title={`${t.period} · ${TIMELINE_STATUS_LABEL[t.status] ?? t.status} · Deudas: ${t.debts} · Monto: ${formatMoney(t.amount)} · Pendiente: ${formatMoney(t.pending)} · Atraso promedio: ${t.avg_delay} días`}
+                >
+                  {t.period}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -638,8 +717,9 @@ function NotesTab({ uuid }: { uuid: string }) {
   const { data: contact } = useQuery({
     queryKey: ['contact', uuid],
     queryFn: async () => {
-      const res = await api.get<ApiResource<Contact & { notes?: ContactNote[] }>>(`/contacts/${uuid}`)
-      return res.data.data
+      // Misma queryKey y misma forma que la consulta principal de la ficha
+      const res = await api.get<ApiResource<Contact & { notes?: ContactNote[] }> & { payment_timeline?: PaymentTimelineEntry[] }>(`/contacts/${uuid}`)
+      return { ...res.data.data, payment_timeline: res.data.payment_timeline ?? [] }
     },
   })
 

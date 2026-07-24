@@ -52,7 +52,7 @@ class DemoAcademicSeeder extends Seeder
             ['code' => Str::slug($name)], ['name' => $name, 'category' => $cat]
         ));
 
-        $periods = ['2024-1', '2024-2', '2025-1', '2025-2', '2026-1'];
+        $periods = ['2022-1', '2022-2', '2023-1', '2023-2', '2024-1', '2024-2', '2025-1', '2025-2', '2026-1'];
         $modalities = ['presencial', 'presencial', 'semipresencial', 'virtual']; // sesgo a presencial
         $counter = 1;
 
@@ -86,8 +86,11 @@ class DemoAcademicSeeder extends Seeder
         $lastA = $this->lastNames[array_rand($this->lastNames)];
         $lastB = $this->lastNames[array_rand($this->lastNames)];
 
-        // Perfil de pago: define deudas e historial
-        $profile = ['cronico', 'inactivo', 'tardio', 'buen_pagador', 'reciente'][array_rand([0, 1, 2, 3, 4])];
+        // Perfil de pago + año de carrera: un alumno de 4to año arrastra ~7
+        // ciclos de historia coherente con su perfil.
+        $profiles = ['puntual', 'fin_de_ciclo', 'demora_leve', 'demora_cronica', 'cronico', 'inactivo', 'reciente'];
+        $profile = $profiles[array_rand($profiles)];
+        $careerYear = random_int(1, 5);
 
         $level = random_int(1, 10) <= 8 ? $levels['Pregrado'] : $levels[random_int(0, 1) ? 'Maestría' : 'Doctorado'];
 
@@ -132,21 +135,42 @@ class DemoAcademicSeeder extends Seeder
             ]);
         };
 
+        // Ciclos que este alumno ya cursó según su año de carrera (los más
+        // recientes del catálogo; el último es el ciclo en curso 2026-1).
+        $myPeriods = array_slice($periods, -($careerYear * 2 - 1));
+        $past = array_slice($myPeriods, 0, -1);
+        $current = end($myPeriods);
+
+        // Atraso que lleva el pago al TRAMO FINAL del ciclo (jun-jul / nov-dic):
+        // vencimiento abril/setiembre + ~60-100 días.
+        $eocDelay = fn () => random_int(60, 100);
+
         match ($profile) {
-            // Debe 2-4 ciclos, el más antiguo hace más de un año
-            'cronico' => collect(array_slice($periods, 0, random_int(2, 4)))
-                ->each(fn ($p) => $addDebt($p, 'overdue')),
-            // Debe 1-3 ciclos y ya no estudia
-            'inactivo' => collect(array_slice($periods, 1, random_int(1, 3)))
-                ->each(fn ($p) => $addDebt($p, 'overdue')),
-            // Historial: paga siempre 30-75 días tarde; al día hoy
-            'tardio' => collect(array_slice($periods, 0, 4))
-                ->each(fn ($p) => $addDebt($p, 'paid', random_int(30, 75))),
-            // Historial impecable: paga antes del vencimiento
-            'buen_pagador' => collect(array_slice($periods, 0, 4))
-                ->each(fn ($p) => $addDebt($p, 'paid', random_int(-10, 5))),
-            // Solo debe el ciclo actual
-            'reciente' => $addDebt('2026-1', 'overdue'),
+            // Historial impecable toda la carrera; el ciclo actual ya pagado o por vencer
+            'puntual' => collect($past)->each(fn ($p) => $addDebt($p, 'paid', random_int(-10, 8)))
+                && $addDebt($current, random_int(0, 1) ? 'paid' : 'pending', random_int(-5, 5)),
+            // Siempre paga, pero al final del ciclo — toda su carrera
+            'fin_de_ciclo' => collect($past)->each(fn ($p) => $addDebt($p, 'paid', $eocDelay()))
+                && $addDebt($current, 'overdue'),
+            // Paga con 20-40 días de atraso sistemático
+            'demora_leve' => collect($past)->each(fn ($p) => $addDebt($p, 'paid', random_int(20, 40)))
+                && $addDebt($current, random_int(0, 1) ? 'paid' : 'overdue', random_int(20, 40)),
+            // Atrasos largos (50-90 días) toda la carrera
+            'demora_cronica' => collect($past)->each(fn ($p) => $addDebt($p, 'paid', random_int(100, 150)))
+                && $addDebt($current, 'overdue'),
+            // Pagó al inicio de su carrera y luego dejó de pagar 2-4 ciclos
+            'cronico' => collect(array_slice($past, 0, max(0, count($past) - 3)))
+                ->each(fn ($p) => $addDebt($p, 'paid', random_int(10, 40)))
+                && collect(array_slice($myPeriods, -min(count($myPeriods), random_int(2, 4))))
+                    ->each(fn ($p) => $addDebt($p, 'overdue')),
+            // Debe y ya no estudia
+            'inactivo' => collect(array_slice($past, 0, max(0, count($past) - 2)))
+                ->each(fn ($p) => $addDebt($p, 'paid', random_int(0, 30)))
+                && collect(array_slice($myPeriods, -random_int(1, 3)))
+                    ->each(fn ($p) => $addDebt($p, 'overdue')),
+            // Buen historial, solo debe el ciclo actual
+            'reciente' => collect($past)->each(fn ($p) => $addDebt($p, 'paid', random_int(0, 12)))
+                && $addDebt($current, 'overdue'),
         };
     }
 }
