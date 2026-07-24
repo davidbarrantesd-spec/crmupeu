@@ -115,7 +115,7 @@ export default function ContactDetail() {
     )
   }
 
-  const totalDebt = (contact.debts ?? []).reduce((acc, d) => acc + parseFloat(String(d.current_balance ?? 0)), 0)
+  const totalDebt = contact.total_debt ?? (contact.debts ?? []).reduce((acc, d) => acc + parseFloat(String(d.pending_balance ?? d.current_balance ?? 0)), 0)
 
   return (
     <div className="p-6">
@@ -351,7 +351,7 @@ function SummaryTab({ contact }: { contact: Contact }) {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold tabular-nums">{formatMoney(d.current_balance)}</p>
+                  <p className="font-semibold tabular-nums">{formatMoney(d.pending_balance ?? d.current_balance)}</p>
                   <StatusBadge status={d.status} />
                 </div>
               </div>
