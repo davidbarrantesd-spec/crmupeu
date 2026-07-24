@@ -45,6 +45,12 @@ return [
         'relay_url' => env('CONVERSATION_RELAY_URL'),
     ],
 
+    // Sistema académico UPeU (ver docs/INTEGRACION-LAMB.md)
+    'lamb' => [
+        'url' => env('LAMB_API_URL'),
+        'token' => env('LAMB_API_TOKEN'),
+    ],
+
     'telephony' => [
         'driver' => env('TELEPHONY_DRIVER', 'sandbox'),
     ],

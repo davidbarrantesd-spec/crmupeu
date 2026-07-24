@@ -17,6 +17,7 @@ class FollowUpController extends Controller
     public function index(Request $request)
     {
         $followUps = FollowUp::query()
+            ->whereHas('contact', fn ($q) => $q->visibleTo($request->user()))
             ->with(['contact', 'campaign', 'agreement', 'rule', 'assignee'])
             ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->when($request->type, fn ($q, $v) => $q->where('type', $v))

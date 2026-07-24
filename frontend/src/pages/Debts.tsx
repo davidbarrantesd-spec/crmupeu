@@ -1,29 +1,51 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { Wallet, AlertTriangle, TrendingDown } from 'lucide-react'
-import { api } from '@/api/client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Wallet, AlertTriangle, TrendingDown, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { api, apiErrorMessage } from '@/api/client'
 import { useDebounce } from '@/hooks/useDebounce'
 import { formatDate, formatMoney, fullName } from '@/lib/format'
 import type { Debt, Paginated } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { FilterBar } from '@/components/shared/FilterBar'
 import { DataTable, type Column } from '@/components/shared/DataTable'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import {
+  AcademicFilters,
+  hasAcademicFilters,
+  type AcademicFilterValues,
+} from '@/components/shared/AcademicFilters'
+import { DebtFormDialog } from '@/components/debts/DebtFormDialog'
 
 const ANY = '__any__'
 
 export default function Debts() {
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState(ANY)
   const [overdue, setOverdue] = useState(ANY)
   const [minBalance, setMinBalance] = useState('')
   const [maxBalance, setMaxBalance] = useState('')
+  const [academic, setAcademic] = useState<AcademicFilterValues>({})
   const [sort, setSort] = useState('')
+
+  const [formOpen, setFormOpen] = useState(false)
+  const [editDebt, setEditDebt] = useState<Debt | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Debt | null>(null)
 
   const debouncedSearch = useDebounce(search)
   const debouncedMin = useDebounce(minBalance)
@@ -36,7 +58,12 @@ export default function Debts() {
     status: status === ANY ? undefined : status,
     overdue: overdue === ANY ? undefined : overdue,
     min_balance: debouncedMin || undefined,
+    min_amount: debouncedMin || undefined,
     max_balance: debouncedMax || undefined,
+    academic_period: academic.academic_period || undefined,
+    campus_id: academic.campus_id || undefined,
+    faculty_id: academic.faculty_id || undefined,
+    career_id: academic.career_id || undefined,
     sort: sort || undefined,
   }
 
@@ -46,6 +73,16 @@ export default function Debts() {
       const res = await api.get<Paginated<Debt> & { totals?: { total_balance?: number; total_original?: number; overdue_count?: number } }>('/debts', { params })
       return res.data
     },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (uuid: string) => api.delete(`/debts/${uuid}`),
+    onSuccess: () => {
+      toast.success('Deuda eliminada')
+      queryClient.invalidateQueries({ queryKey: ['debts'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+    },
+    onError: (e) => toast.error(apiErrorMessage(e)),
   })
 
   const totals = (data as { totals?: { total_balance?: number; total_original?: number; overdue_count?: number } } | undefined)?.totals
@@ -65,8 +102,13 @@ export default function Debts() {
           '—'
         ),
     },
-    { key: 'reference', header: 'Referencia', render: (d) => d.reference ?? '—' },
+    { key: 'reference', header: 'Código', render: (d) => d.code ?? d.reference ?? '—' },
     { key: 'concept', header: 'Concepto', className: 'max-w-[200px] truncate', render: (d) => d.concept ?? '—' },
+    {
+      key: 'academic_period',
+      header: 'Periodo',
+      render: (d) => d.academic_period ?? '—',
+    },
     {
       key: 'original_amount',
       header: 'Monto original',
@@ -78,7 +120,7 @@ export default function Debts() {
       header: 'Saldo',
       sortable: true,
       className: 'text-right',
-      render: (d) => <span className="font-semibold tabular-nums">{formatMoney(d.current_balance)}</span>,
+      render: (d) => <span className="font-semibold tabular-nums">{formatMoney(d.pending_balance ?? d.current_balance)}</span>,
     },
     { key: 'due_date', header: 'Vencimiento', sortable: true, render: (d) => formatDate(d.due_date) },
     {
@@ -92,11 +134,55 @@ export default function Debts() {
         ),
     },
     { key: 'status', header: 'Estado', render: (d) => <StatusBadge status={d.status} /> },
+    {
+      key: 'actions',
+      header: '',
+      className: 'w-10',
+      render: (d) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="iconSm" onClick={(e) => e.stopPropagation()}>
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem
+              onSelect={() => {
+                setEditDebt(d)
+                setFormOpen(true)
+              }}
+            >
+              <Pencil />
+              Editar
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setDeleteTarget(d)}>
+              <Trash2 />
+              Eliminar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
   ]
 
   return (
     <div className="p-6">
-      <PageHeader title="Deudas" description="Cartera de deudas por cobrar" />
+      <PageHeader
+        title="Deudas"
+        description="Cartera de deudas por cobrar"
+        actions={
+          <Button
+            onClick={() => {
+              setEditDebt(null)
+              setFormOpen(true)
+            }}
+          >
+            <Plus />
+            Nueva deuda
+          </Button>
+        }
+      />
 
       {/* Totales */}
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -145,9 +231,10 @@ export default function Debts() {
           setOverdue(ANY)
           setMinBalance('')
           setMaxBalance('')
+          setAcademic({})
           setPage(1)
         }}
-        hasActiveFilters={!!search || status !== ANY || overdue !== ANY || !!minBalance || !!maxBalance}
+        hasActiveFilters={!!search || status !== ANY || overdue !== ANY || !!minBalance || !!maxBalance || hasAcademicFilters(academic)}
       >
         <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1) }}>
           <SelectTrigger className="w-36">
@@ -172,6 +259,11 @@ export default function Debts() {
             <SelectItem value="0">Sin mora</SelectItem>
           </SelectContent>
         </Select>
+        <AcademicFilters
+          value={academic}
+          onChange={(v) => { setAcademic(v); setPage(1) }}
+          fields={['academic_period', 'campus_id', 'faculty_id', 'career_id']}
+        />
         <Input
           type="number"
           value={minBalance}
@@ -201,6 +293,19 @@ export default function Debts() {
         rowKey={(d) => d.uuid}
         emptyTitle="Sin deudas"
         emptyDescription="No se encontraron deudas con los filtros aplicados."
+      />
+
+      <DebtFormDialog open={formOpen} onOpenChange={setFormOpen} debt={editDebt} />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        title="Eliminar deuda"
+        description={`¿Seguro que deseas eliminar la deuda ${deleteTarget?.code ?? deleteTarget?.reference ?? deleteTarget?.concept ?? ''} de ${fullName(deleteTarget?.contact)}? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={async () => {
+          if (deleteTarget) await deleteMutation.mutateAsync(deleteTarget.uuid)
+        }}
       />
     </div>
   )

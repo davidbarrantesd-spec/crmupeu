@@ -16,6 +16,16 @@ export interface Role {
   permissions?: string[]
 }
 
+export interface UserScope {
+  id?: number
+  campus_id: number | null
+  faculty_id: number | null
+  career_id: number | null
+  campus?: { name: string } | null
+  faculty?: { name: string } | null
+  career?: { name: string } | null
+}
+
 export interface User {
   uuid: string
   name: string
@@ -24,6 +34,7 @@ export interface User {
   status: 'active' | 'inactive'
   roles: string[] | Role[]
   permissions?: string[]
+  scopes?: UserScope[]
   created_at?: string
 }
 
@@ -43,16 +54,64 @@ export interface Tag {
   color?: string | null
 }
 
+// ——— Catálogos académicos ———
+
+export interface Campus {
+  id: number
+  code: string
+  name: string
+}
+
+export interface Career {
+  id: number
+  code: string
+  name: string
+  faculty_id: number
+}
+
+export interface Faculty {
+  id: number
+  code: string
+  name: string
+  careers: Career[]
+}
+
+export interface AcademicLevel {
+  id: number
+  code: string
+  name: string
+  category?: string
+}
+
+export interface PaymentSegmentDef {
+  key: string
+  label: string
+}
+
+export interface AcademicCatalogs {
+  campuses: Campus[]
+  faculties: Faculty[]
+  levels: AcademicLevel[]
+  modalities: string[]
+  periods: string[]
+  segments: PaymentSegmentDef[]
+}
+
+export type EnrollmentStatus = 'matriculado' | 'no_matriculado'
+
 export interface Debt {
   uuid: string
   contact_uuid?: string
   contact?: Contact
   reference?: string | null
+  code?: string | null
   concept?: string | null
   original_amount: number | string
   current_balance: number | string
+  pending_balance?: number | string
   currency?: string
   due_date?: string | null
+  academic_period?: string | null
   days_overdue?: number
   status: string
   installments_total?: number | null
@@ -60,6 +119,9 @@ export interface Debt {
   created_at?: string
   updated_at?: string
 }
+
+/** Referencia a un catálogo académico: el backend puede enviar objeto o solo el nombre. */
+export type CatalogRef = { id?: number; name: string } | string | null
 
 export interface Contact {
   uuid: string
@@ -76,6 +138,17 @@ export interface Contact {
   status?: string
   source?: string | null
   segment?: string | null
+  // Datos académicos
+  id_persona?: string | number | null
+  student_code?: string | null
+  campus?: CatalogRef
+  faculty?: CatalogRef
+  career?: CatalogRef
+  academic_level?: CatalogRef
+  modality?: string | null
+  enrollment_status?: EnrollmentStatus | string | null
+  payment_segment?: string | null
+  total_pending?: number | string | null
   call_consent?: boolean
   whatsapp_consent?: boolean
   do_not_contact?: boolean
@@ -134,6 +207,70 @@ export interface SegmentFilters {
   max_attempts_lt?: number | null
   previous_campaign_uuid?: string | null
   previous_result?: string[]
+  // Filtros académicos
+  campus_id?: number[]
+  faculty_id?: number[]
+  career_id?: number[]
+  academic_level_id?: number[]
+  modality?: string[]
+  enrollment_status?: string[]
+  payment_segment?: string[]
+  academic_period?: string[]
+}
+
+// ——— Panorama académico (dashboard) ———
+
+export interface AcademicDashboardKpis {
+  students_with_debt: number
+  total_pending: number | string
+  total_overdue: number | string
+  avg_debt: number | string
+}
+
+export interface AcademicSegmentStat {
+  segment: string
+  label: string
+  count: number
+  amount: number | string
+}
+
+export interface AcademicGroupStat {
+  name: string
+  count: number
+  amount: number | string
+}
+
+export interface AcademicCareerStat {
+  name: string
+  faculty: string
+  count: number
+  amount: number | string
+}
+
+export interface AcademicPeriodStat {
+  period: string
+  amount: number | string
+}
+
+export interface TopDebtor {
+  uuid: string
+  full_name: string
+  career?: string | null
+  campus?: string | null
+  total_pending: number | string
+  periods_count: number
+  oldest_period?: string | null
+  payment_segment?: string | null
+}
+
+export interface AcademicDashboard {
+  kpis: AcademicDashboardKpis
+  by_segment: AcademicSegmentStat[]
+  by_campus: AcademicGroupStat[]
+  by_faculty: AcademicGroupStat[]
+  top_careers: AcademicCareerStat[]
+  by_period: AcademicPeriodStat[]
+  top_debtors: TopDebtor[]
 }
 
 export interface DtmfOption {

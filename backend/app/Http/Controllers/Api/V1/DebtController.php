@@ -14,7 +14,8 @@ class DebtController extends Controller
     public function index(Request $request)
     {
         $debts = Debt::query()
-            ->with('contact')
+            ->whereHas('contact', fn ($q) => $q->visibleTo($request->user()))
+            ->with('contact.career', 'contact.campus')
             ->when($request->search, fn ($q, $s) => $q->where(fn ($q2) => $q2
                 ->where('code', 'ilike', "%{$s}%")
                 ->orWhere('concept', 'ilike', "%{$s}%")
@@ -27,6 +28,10 @@ class DebtController extends Controller
             ->when($request->max_balance, fn ($q, $v) => $q->where('pending_balance', '<=', $v))
             ->when($request->due_before, fn ($q, $v) => $q->where('due_date', '<=', $v))
             ->when($request->due_after, fn ($q, $v) => $q->where('due_date', '>=', $v))
+            ->when($request->academic_period, fn ($q, $v) => $q->where('academic_period', $v))
+            ->when($request->campus_id, fn ($q, $v) => $q->whereHas('contact', fn ($q2) => $q2->where('campus_id', $v)))
+            ->when($request->faculty_id, fn ($q, $v) => $q->whereHas('contact', fn ($q2) => $q2->where('faculty_id', $v)))
+            ->when($request->career_id, fn ($q, $v) => $q->whereHas('contact', fn ($q2) => $q2->where('career_id', $v)))
             ->orderBy($request->get('sort', 'created_at'), $request->get('dir', 'desc'))
             ->paginate($request->integer('per_page', 15));
 
@@ -84,6 +89,8 @@ class DebtController extends Controller
             'installments' => ['sometimes', 'integer', 'min:1'],
             'overdue_installments' => ['sometimes', 'integer', 'min:0'],
             'last_payment_date' => ['nullable', 'date'],
+            'academic_period' => ['nullable', 'string', 'max:10', 'regex:/^\d{4}-\d{1,2}$/'],
+            'paid_at' => ['nullable', 'date'],
             'observations' => ['nullable', 'string', 'max:5000'],
             'extra_data' => ['nullable', 'array'],
         ]);

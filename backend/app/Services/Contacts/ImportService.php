@@ -13,11 +13,18 @@ class ImportService
     public const CONTACT_FIELDS = [
         'internal_code', 'first_name', 'last_name', 'dni', 'phone', 'phone_secondary',
         'email', 'city', 'address', 'segment', 'tags',
+        // dimensión académica (por nombre de catálogo; se crean si no existen)
+        'id_persona', 'student_code', 'campus', 'faculty', 'career',
+        'academic_level', 'modality', 'enrollment_status',
+        // deuda opcional en la misma fila (import combinado contactos+deudas)
+        'debt_code', 'debt_concept', 'debt_amount', 'debt_balance',
+        'debt_currency', 'debt_due_date', 'debt_period', 'debt_status',
     ];
 
     public const DEBT_FIELDS = [
         'dni', 'phone', 'code', 'concept', 'original_amount', 'pending_balance',
         'currency', 'due_date', 'status', 'installments', 'overdue_installments', 'observations',
+        'academic_period', 'paid_at',
     ];
 
     /**
@@ -115,6 +122,24 @@ class ImportService
             'installments' => ['cuotas', 'numero de cuotas'],
             'overdue_installments' => ['cuotas vencidas'],
             'observations' => ['observaciones', 'notas'],
+            // académicos
+            'id_persona' => ['id persona', 'id_persona', 'idpersona'],
+            'student_code' => ['codigo estudiante', 'código estudiante', 'codigo_estudiante'],
+            'campus' => ['campus', 'sede', 'filial'],
+            'faculty' => ['facultad'],
+            'career' => ['carrera', 'escuela profesional', 'ep', 'escuela'],
+            'academic_level' => ['nivel', 'nivel academico', 'nivel académico'],
+            'modality' => ['modalidad'],
+            'enrollment_status' => ['estado matricula', 'estado matrícula', 'estado_matricula'],
+            'academic_period' => ['periodo', 'ciclo', 'periodo academico', 'periodo académico', 'deuda_periodo'],
+            'debt_code' => ['deuda codigo', 'deuda_codigo'],
+            'debt_concept' => ['deuda concepto', 'deuda_concepto'],
+            'debt_amount' => ['deuda monto', 'deuda_monto'],
+            'debt_balance' => ['deuda saldo', 'deuda_saldo'],
+            'debt_currency' => ['deuda moneda', 'deuda_moneda'],
+            'debt_due_date' => ['deuda vencimiento', 'deuda_vencimiento'],
+            'debt_period' => ['deuda periodo', 'deuda_periodo'],
+            'debt_status' => ['deuda estado', 'deuda_estado'],
         ];
 
         $mapping = [];

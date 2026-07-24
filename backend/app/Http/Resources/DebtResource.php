@@ -24,6 +24,8 @@ class DebtResource extends JsonResource
             'installments' => $this->installments,
             'overdue_installments' => $this->overdue_installments,
             'last_payment_date' => $this->last_payment_date?->toDateString(),
+            'academic_period' => $this->academic_period,
+            'paid_at' => $this->paid_at?->toDateString(),
             'origin' => $this->origin,
             'observations' => $this->observations,
             'extra_data' => $this->extra_data,

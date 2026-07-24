@@ -20,6 +20,9 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { FormField } from '@/components/shared/FormField'
+import { useAcademicCatalogs, modalityLabel, enrollmentLabel } from '@/hooks/useAcademicCatalogs'
+
+const NONE = '__none__'
 
 const schema = z.object({
   internal_code: z.string().optional(),
@@ -39,6 +42,15 @@ const schema = z.object({
   do_not_contact: z.boolean(),
   do_not_contact_reason: z.string().optional(),
   tags: z.string().optional(),
+  // Datos académicos (opcionales)
+  id_persona: z.string().optional(),
+  student_code: z.string().optional(),
+  campus_id: z.string().optional(),
+  faculty_id: z.string().optional(),
+  career_id: z.string().optional(),
+  academic_level_id: z.string().optional(),
+  modality: z.string().optional(),
+  enrollment_status: z.string().optional(),
 })
 
 type ContactForm = z.infer<typeof schema>
@@ -49,9 +61,16 @@ interface ContactFormDialogProps {
   contact?: Contact | null
 }
 
+/** Extrae el id de una referencia de catálogo ({id, name} | string | null). */
+function refId(ref: Contact['campus']): string {
+  if (ref && typeof ref === 'object' && ref.id != null) return String(ref.id)
+  return ''
+}
+
 export function ContactFormDialog({ open, onOpenChange, contact }: ContactFormDialogProps) {
   const queryClient = useQueryClient()
   const isEdit = !!contact
+  const { catalogs, careersForFaculty } = useAcademicCatalogs()
 
   const form = useForm<ContactForm>({
     resolver: zodResolver(schema),
@@ -82,6 +101,14 @@ export function ContactFormDialog({ open, onOpenChange, contact }: ContactFormDi
         do_not_contact: contact?.do_not_contact ?? false,
         do_not_contact_reason: contact?.do_not_contact_reason ?? '',
         tags: (contact?.tags ?? []).map((t) => (typeof t === 'string' ? t : t.name)).join(', '),
+        id_persona: contact?.id_persona != null ? String(contact.id_persona) : '',
+        student_code: contact?.student_code ?? '',
+        campus_id: refId(contact?.campus),
+        faculty_id: refId(contact?.faculty),
+        career_id: refId(contact?.career),
+        academic_level_id: refId(contact?.academic_level),
+        modality: contact?.modality ?? '',
+        enrollment_status: contact?.enrollment_status ?? '',
       })
     }
   }, [open, contact, form])
@@ -94,6 +121,15 @@ export function ContactFormDialog({ open, onOpenChange, contact }: ContactFormDi
         tags: data.tags
           ? data.tags.split(',').map((t) => t.trim()).filter(Boolean)
           : [],
+        // Datos académicos
+        id_persona: data.id_persona || null,
+        student_code: data.student_code || null,
+        campus_id: data.campus_id ? Number(data.campus_id) : null,
+        faculty_id: data.faculty_id ? Number(data.faculty_id) : null,
+        career_id: data.career_id ? Number(data.career_id) : null,
+        academic_level_id: data.academic_level_id ? Number(data.academic_level_id) : null,
+        modality: data.modality || null,
+        enrollment_status: data.enrollment_status || null,
       }
       return isEdit ? api.put(`/contacts/${contact.uuid}`, payload) : api.post('/contacts', payload)
     },
@@ -164,6 +200,132 @@ export function ContactFormDialog({ open, onOpenChange, contact }: ContactFormDi
             <FormField label="Etiquetas" error={errors.tags?.message} hint="Separadas por comas">
               <Input {...form.register('tags')} placeholder="vip, moroso" />
             </FormField>
+          </div>
+
+          {/* Datos académicos */}
+          <div className="rounded-lg border p-4">
+            <p className="mb-3 text-sm font-medium">Datos académicos</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="ID persona" error={errors.id_persona?.message}>
+                <Input {...form.register('id_persona')} placeholder="p. ej. 123456" />
+              </FormField>
+              <FormField label="Código de estudiante" error={errors.student_code?.message}>
+                <Input {...form.register('student_code')} placeholder="p. ej. 202112345" />
+              </FormField>
+              <FormField label="Campus">
+                <Select
+                  value={form.watch('campus_id') || NONE}
+                  onValueChange={(v) => form.setValue('campus_id', v === NONE ? '' : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona campus" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— Sin campus —</SelectItem>
+                    {catalogs.campuses.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField label="Facultad">
+                <Select
+                  value={form.watch('faculty_id') || NONE}
+                  onValueChange={(v) => {
+                    const next = v === NONE ? '' : v
+                    form.setValue('faculty_id', next)
+                    // Cascada: limpiar carrera si ya no pertenece a la facultad
+                    const careerId = form.getValues('career_id')
+                    if (careerId && !careersForFaculty(next || undefined).some((c) => String(c.id) === careerId)) {
+                      form.setValue('career_id', '')
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona facultad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— Sin facultad —</SelectItem>
+                    {catalogs.faculties.map((f) => (
+                      <SelectItem key={f.id} value={String(f.id)}>
+                        {f.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField label="Carrera">
+                <Select
+                  value={form.watch('career_id') || NONE}
+                  onValueChange={(v) => form.setValue('career_id', v === NONE ? '' : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona carrera" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— Sin carrera —</SelectItem>
+                    {careersForFaculty(form.watch('faculty_id') || undefined).map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField label="Nivel">
+                <Select
+                  value={form.watch('academic_level_id') || NONE}
+                  onValueChange={(v) => form.setValue('academic_level_id', v === NONE ? '' : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona nivel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— Sin nivel —</SelectItem>
+                    {catalogs.levels.map((l) => (
+                      <SelectItem key={l.id} value={String(l.id)}>
+                        {l.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField label="Modalidad">
+                <Select
+                  value={form.watch('modality') || NONE}
+                  onValueChange={(v) => form.setValue('modality', v === NONE ? '' : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona modalidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— Sin modalidad —</SelectItem>
+                    {catalogs.modalities.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {modalityLabel(m)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField label="Estado de matrícula">
+                <Select
+                  value={form.watch('enrollment_status') || NONE}
+                  onValueChange={(v) => form.setValue('enrollment_status', v === NONE ? '' : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— Sin estado —</SelectItem>
+                    <SelectItem value="matriculado">{enrollmentLabel('matriculado')}</SelectItem>
+                    <SelectItem value="no_matriculado">{enrollmentLabel('no_matriculado')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 rounded-lg border p-4 sm:grid-cols-3">

@@ -20,6 +20,7 @@ class CallController extends Controller
     public function index(Request $request)
     {
         $calls = Call::query()
+            ->whereHas('contact', fn ($q) => $q->visibleTo($request->user()))
             ->with(['contact', 'campaign'])
             ->when($request->search, fn ($q, $s) => $q->where(fn ($q2) => $q2
                 ->where('to_number', 'ilike', "%{$s}%")
@@ -56,6 +57,10 @@ class CallController extends Controller
         ]);
 
         $contact = Contact::where('uuid', $data['contact_uuid'])->firstOrFail();
+        abort_unless(
+            Contact::visibleTo($request->user())->whereKey($contact->id)->exists(),
+            403, 'El contacto está fuera de tu alcance académico.'
+        );
 
         $call = $this->service->createManualCall($contact, [
             'type' => $data['type'],

@@ -67,6 +67,62 @@ class Contact extends Model
         return $this->morphMany(InternalNote::class, 'notable');
     }
 
+    public function campus(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Campus::class);
+    }
+
+    public function faculty(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Faculty::class);
+    }
+
+    public function career(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Career::class);
+    }
+
+    public function academicLevel(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(AcademicLevel::class);
+    }
+
+    /**
+     * Restricción DURA de alcance académico: el usuario solo ve estudiantes de
+     * los campus/facultades/carreras que tiene asignados (user_scopes). Un
+     * usuario sin asignaciones ve todo. Campos null en una asignación actúan
+     * de comodín; los contactos sin datos académicos se muestran siempre (aún
+     * no clasificados — ocultarlos los volvería inalcanzables para todos).
+     */
+    public function scopeVisibleTo($query, ?User $user)
+    {
+        if (! $user || $user->scopes()->count() === 0) {
+            return $query;
+        }
+
+        $scopes = $user->scopes;
+
+        return $query->where(function ($q) use ($scopes) {
+            $q->whereNull('contacts.campus_id')
+                ->whereNull('contacts.faculty_id')
+                ->whereNull('contacts.career_id');
+
+            foreach ($scopes as $scope) {
+                $q->orWhere(function ($sub) use ($scope) {
+                    if ($scope->campus_id) {
+                        $sub->where('contacts.campus_id', $scope->campus_id);
+                    }
+                    if ($scope->faculty_id) {
+                        $sub->where('contacts.faculty_id', $scope->faculty_id);
+                    }
+                    if ($scope->career_id) {
+                        $sub->where('contacts.career_id', $scope->career_id);
+                    }
+                });
+            }
+        });
+    }
+
     public function getFullNameAttribute(): string
     {
         return trim("{$this->first_name} {$this->last_name}");

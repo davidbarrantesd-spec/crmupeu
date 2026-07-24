@@ -23,6 +23,7 @@ class Debt extends Model
         'pending_balance' => 'decimal:2',
         'due_date' => 'date',
         'last_payment_date' => 'date',
+        'paid_at' => 'date',
         'extra_data' => 'array',
     ];
 

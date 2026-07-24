@@ -17,6 +17,7 @@ class AgreementController extends Controller
     public function index(Request $request)
     {
         $agreements = Agreement::query()
+            ->whereHas('contact', fn ($q) => $q->visibleTo($request->user()))
             ->with(['contact', 'debt', 'call', 'creator'])
             ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->when($request->contact, fn ($q, $v) => $q->whereHas('contact', fn ($q2) => $q2->where('uuid', $v)))

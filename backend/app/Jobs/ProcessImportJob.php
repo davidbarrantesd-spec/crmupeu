@@ -104,10 +104,45 @@ class ProcessImportJob implements ShouldQueue
             'city' => $data['city'] ?? null,
             'address' => $data['address'] ?? null,
             'segment' => $data['segment'] ?? null,
+            'id_persona' => $data['id_persona'] ?? null,
+            'student_code' => $data['student_code'] ?? null,
+            'modality' => $this->normalizeEnum($data['modality'] ?? null, ['presencial', 'semipresencial', 'virtual']),
+            'enrollment_status' => $this->normalizeEnum($data['enrollment_status'] ?? null, ['matriculado', 'no_matriculado']),
         ], fn ($v) => $v !== null && $v !== '');
 
+        // Catálogos por nombre: se crean si no existen (la importación es la
+        // fuente de verdad hasta que llegue la sincronización con LAMB).
+        if (! empty($data['campus'])) {
+            $attributes['campus_id'] = \App\Models\Campus::firstOrCreate(
+                ['code' => \Illuminate\Support\Str::slug($data['campus'])], ['name' => $data['campus']]
+            )->id;
+        }
+        $facultyId = null;
+        if (! empty($data['faculty'])) {
+            $facultyId = \App\Models\Faculty::firstOrCreate(
+                ['code' => \Illuminate\Support\Str::slug($data['faculty'])], ['name' => $data['faculty']]
+            )->id;
+            $attributes['faculty_id'] = $facultyId;
+        }
+        if (! empty($data['career'])) {
+            $attributes['career_id'] = \App\Models\Career::firstOrCreate(
+                ['code' => \Illuminate\Support\Str::slug($data['career'])],
+                ['name' => $data['career'], 'faculty_id' => $facultyId]
+            )->id;
+        }
+        if (! empty($data['academic_level'])) {
+            $name = trim($data['academic_level']);
+            $attributes['academic_level_id'] = \App\Models\AcademicLevel::firstOrCreate(
+                ['code' => \Illuminate\Support\Str::slug($name)],
+                ['name' => $name, 'category' => str_contains(mb_strtolower($name), 'pregrado') ? 'pregrado' : 'posgrado']
+            )->id;
+        }
+
         $existing = null;
-        if (! empty($data['dni'])) {
+        if (! empty($data['id_persona'])) {
+            $existing = Contact::where('id_persona', $data['id_persona'])->first();
+        }
+        if (! $existing && ! empty($data['dni'])) {
             $existing = Contact::where('dni', $data['dni'])->first();
         }
         $existing ??= Contact::where('phone', $phone)->first();
@@ -123,6 +158,22 @@ class ProcessImportJob implements ShouldQueue
 
         if (! empty($data['tags'])) {
             $contactService->syncTags($contact, array_map('trim', explode(',', $data['tags'])));
+        }
+
+        // Deuda embebida (plantilla combinada contactos+deudas).
+        if (! empty($data['debt_code'])) {
+            $this->importDebt([
+                'dni' => $contact->dni,
+                'phone' => $contact->phone,
+                'code' => $data['debt_code'],
+                'concept' => $data['debt_concept'] ?? null,
+                'original_amount' => $data['debt_amount'] ?? null,
+                'pending_balance' => $data['debt_balance'] ?? null,
+                'currency' => $data['debt_currency'] ?? null,
+                'due_date' => $data['debt_due_date'] ?? null,
+                'status' => $data['debt_status'] ?? null,
+                'academic_period' => $data['debt_period'] ?? null,
+            ]);
         }
 
         return $status;
@@ -157,6 +208,8 @@ class ProcessImportJob implements ShouldQueue
             'installments' => (int) ($data['installments'] ?? 1) ?: 1,
             'overdue_installments' => (int) ($data['overdue_installments'] ?? 0),
             'observations' => $data['observations'] ?? null,
+            'academic_period' => $data['academic_period'] ?? null,
+            'paid_at' => ! empty($data['paid_at']) ? \Carbon\Carbon::parse($data['paid_at'])->toDateString() : null,
             'origin' => 'import',
         ];
 
@@ -172,5 +225,16 @@ class ProcessImportJob implements ShouldQueue
         Debt::create($attributes + ['contact_id' => $contact->id, 'code' => $data['code']]);
 
         return 'created';
+    }
+
+    protected function normalizeEnum(?string $value, array $allowed): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $normalized = str_replace(' ', '_', mb_strtolower(trim($value)));
+
+        return in_array($normalized, $allowed) ? $normalized : null;
     }
 }

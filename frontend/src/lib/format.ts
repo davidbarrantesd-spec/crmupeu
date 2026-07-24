@@ -72,6 +72,13 @@ export function fullName(contact: { first_name?: string; last_name?: string | nu
   return [contact.first_name, contact.last_name].filter(Boolean).join(' ') || '—'
 }
 
+/** Nombre de una referencia de catálogo académico (objeto {name} o string). */
+export function catalogName(value: { name?: string } | string | null | undefined): string {
+  if (!value) return '—'
+  if (typeof value === 'string') return value
+  return value.name ?? '—'
+}
+
 export function initials(name: string | null | undefined): string {
   if (!name) return '?'
   return name

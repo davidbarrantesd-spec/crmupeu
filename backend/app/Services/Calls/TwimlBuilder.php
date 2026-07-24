@@ -95,11 +95,15 @@ class TwimlBuilder
         // haría fallback silencioso a una voz robótica básica).
         $voice = $call->campaign?->voice ?: 'CaJslL1xziwefCeTNzHv';
 
+        // STT Deepgram Flux: detección semántica de fin de turno (mucho más
+        // rápida que el timer de silencio de Google). eotThreshold 0.7 = algo
+        // más ansioso que el default 0.8; speechTimeout como tope de silencio.
         return $this->document(
             '<Connect><ConversationRelay url="'.e($wsUrl).'"'
             .' welcomeGreeting="'.e($greeting).'"'
             .' language="es-US" ttsProvider="ElevenLabs" voice="'.e($voice).'"'
-            .' transcriptionProvider="Google" transcriptionLanguage="es-US" speechModel="telephony">'
+            .' transcriptionProvider="Deepgram" speechModel="flux" transcriptionLanguage="es"'
+            .' eotThreshold="0.7" speechTimeout="3000">'
             .'<Parameter name="greeting" value="'.e($greeting).'"/>'
             .'</ConversationRelay></Connect>'
         );

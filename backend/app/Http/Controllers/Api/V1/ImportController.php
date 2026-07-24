@@ -110,4 +110,31 @@ class ImportController extends Controller
             'created_at' => $import->created_at?->toIso8601String(),
         ];
     }
+
+    /**
+     * Plantilla CSV combinada contactos+deudas con la dimensión académica.
+     */
+    public function template()
+    {
+        $headers = [
+            'id_persona', 'codigo_estudiante', 'dni', 'nombres', 'apellidos', 'telefono',
+            'email', 'campus', 'facultad', 'carrera', 'nivel', 'modalidad', 'estado_matricula',
+            'deuda_codigo', 'deuda_concepto', 'deuda_monto', 'deuda_saldo', 'deuda_moneda',
+            'deuda_vencimiento', 'deuda_periodo', 'deuda_estado',
+        ];
+        $example = [
+            'P0012345', '202112345', '71234567', 'Juan Carlos', 'Quispe Mamani', '+51987654321',
+            'juan.quispe@upeu.edu.pe', 'Lima', 'Facultad de Ingeniería y Arquitectura',
+            'Ingeniería de Sistemas', 'Pregrado', 'presencial', 'matriculado',
+            'PEN-2026-1-001', 'Pensión de enseñanza marzo 2026', '450.00', '450.00', 'PEN',
+            '2026-03-15', '2026-1', 'overdue',
+        ];
+
+        $csv = implode(',', $headers)."\n".implode(',', array_map(fn ($v) => '"'.$v.'"', $example))."\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="contactos-deudas-plantilla.csv"',
+        ]);
+    }
 }

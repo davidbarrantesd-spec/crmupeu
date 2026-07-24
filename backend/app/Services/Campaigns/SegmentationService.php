@@ -37,6 +37,23 @@ class SegmentationService
             $query->whereHas('tags', fn ($q) => $q->whereIn('name', (array) $filters['tags']));
         }
 
+        // Filtros académicos (campus/facultad/carrera/nivel/modalidad/matrícula/segmento)
+        foreach (['campus_id', 'faculty_id', 'career_id', 'academic_level_id'] as $field) {
+            if (! empty($filters[$field])) {
+                $query->whereIn($field, (array) $filters[$field]);
+            }
+        }
+        foreach (['modality', 'enrollment_status', 'payment_segment'] as $field) {
+            if (! empty($filters[$field])) {
+                $query->whereIn($field, (array) $filters[$field]);
+            }
+        }
+        if (! empty($filters['academic_period'])) {
+            $query->whereHas('debts', fn ($q) => $q
+                ->whereNotIn('status', ['paid', 'cancelled'])
+                ->whereIn('academic_period', (array) $filters['academic_period']));
+        }
+
         $debtFilters = array_filter([
             'min_debt' => $filters['min_debt'] ?? null,
             'max_debt' => $filters['max_debt'] ?? null,

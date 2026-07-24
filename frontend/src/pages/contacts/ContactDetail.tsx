@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Pencil,
   Phone,
+  Plus,
   StickyNote,
   Wallet,
   FileText,
@@ -38,6 +39,7 @@ import type {
   Contact,
   ContactNote,
   Conversation,
+  Debt,
   FollowUp,
   Paginated,
   TimelineEvent,
@@ -56,6 +58,7 @@ import { AudioPlayer } from '@/components/shared/AudioPlayer'
 import { JsonViewer } from '@/components/shared/JsonViewer'
 import { CallDialog } from '@/components/contacts/CallDialog'
 import { ContactFormDialog } from '@/components/contacts/ContactFormDialog'
+import { DebtFormDialog } from '@/components/debts/DebtFormDialog'
 
 const TIMELINE_ICONS: Record<TimelineEvent['type'], React.ComponentType<{ className?: string }>> = {
   call: Phone,
@@ -340,43 +343,81 @@ function TimelineTab({ uuid }: { uuid: string }) {
 }
 
 function DebtsTab({ contact }: { contact: Contact }) {
-  if (!contact.debts?.length) return <EmptyState icon={Wallet} title="Sin deudas registradas" />
+  const [debtFormOpen, setDebtFormOpen] = useState(false)
+  const [editDebt, setEditDebt] = useState<Debt | null>(null)
+
+  const addButton = (
+    <Button
+      onClick={() => {
+        setEditDebt(null)
+        setDebtFormOpen(true)
+      }}
+    >
+      <Plus />
+      Agregar deuda
+    </Button>
+  )
+
   return (
-    <div className="rounded-lg border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Referencia</TableHead>
-            <TableHead>Concepto</TableHead>
-            <TableHead className="text-right">Monto original</TableHead>
-            <TableHead className="text-right">Saldo actual</TableHead>
-            <TableHead>Vencimiento</TableHead>
-            <TableHead>Mora</TableHead>
-            <TableHead>Cuotas</TableHead>
-            <TableHead>Estado</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {contact.debts.map((d) => (
-            <TableRow key={d.uuid}>
-              <TableCell>{d.reference ?? '—'}</TableCell>
-              <TableCell>{d.concept ?? '—'}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatMoney(d.original_amount)}</TableCell>
-              <TableCell className="text-right font-medium tabular-nums">{formatMoney(d.current_balance)}</TableCell>
-              <TableCell>{formatDate(d.due_date)}</TableCell>
-              <TableCell>
-                {d.days_overdue ? <span className="text-destructive">{d.days_overdue} días</span> : '—'}
-              </TableCell>
-              <TableCell>
-                {d.installments_total ? `${d.installments_paid ?? 0}/${d.installments_total}` : '—'}
-              </TableCell>
-              <TableCell>
-                <StatusBadge status={d.status} />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="space-y-3">
+      <div className="flex justify-end">{addButton}</div>
+      {!contact.debts?.length ? (
+        <EmptyState icon={Wallet} title="Sin deudas registradas" />
+      ) : (
+        <div className="rounded-lg border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Código</TableHead>
+                <TableHead>Concepto</TableHead>
+                <TableHead>Periodo</TableHead>
+                <TableHead className="text-right">Monto original</TableHead>
+                <TableHead className="text-right">Saldo actual</TableHead>
+                <TableHead>Vencimiento</TableHead>
+                <TableHead>Mora</TableHead>
+                <TableHead>Cuotas</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {contact.debts.map((d) => (
+                <TableRow key={d.uuid}>
+                  <TableCell>{d.code ?? d.reference ?? '—'}</TableCell>
+                  <TableCell>{d.concept ?? '—'}</TableCell>
+                  <TableCell>{d.academic_period ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMoney(d.original_amount)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">{formatMoney(d.pending_balance ?? d.current_balance)}</TableCell>
+                  <TableCell>{formatDate(d.due_date)}</TableCell>
+                  <TableCell>
+                    {d.days_overdue ? <span className="text-destructive">{d.days_overdue} días</span> : '—'}
+                  </TableCell>
+                  <TableCell>
+                    {d.installments_total ? `${d.installments_paid ?? 0}/${d.installments_total}` : '—'}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={d.status} />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="iconSm"
+                      title="Editar deuda"
+                      onClick={() => {
+                        setEditDebt(d)
+                        setDebtFormOpen(true)
+                      }}
+                    >
+                      <Pencil />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      <DebtFormDialog open={debtFormOpen} onOpenChange={setDebtFormOpen} debt={editDebt} contact={contact} />
     </div>
   )
 }

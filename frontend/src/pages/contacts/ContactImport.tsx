@@ -54,6 +54,30 @@ const DEBT_FIELDS: { value: string; label: string }[] = [
   { value: 'installments_paid', label: 'Cuotas pagadas' },
 ]
 
+const TEMPLATE_COLUMNS = [
+  'id_persona',
+  'codigo_estudiante',
+  'dni',
+  'nombres',
+  'apellidos',
+  'telefono',
+  'email',
+  'campus',
+  'facultad',
+  'carrera',
+  'nivel',
+  'modalidad',
+  'estado_matricula',
+  'deuda_codigo',
+  'deuda_concepto',
+  'deuda_monto',
+  'deuda_saldo',
+  'deuda_moneda',
+  'deuda_vencimiento',
+  'deuda_periodo',
+  'deuda_estado',
+]
+
 type Step = 1 | 2 | 3
 
 export default function ContactImport() {
@@ -168,17 +192,30 @@ export default function ContactImport() {
       {step === 1 && (
         <Card>
           <CardContent className="space-y-4 p-6">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">Tipo de importación:</span>
-              <Select value={type} onValueChange={(v) => setType(v as 'contacts' | 'debts')}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="contacts">Contactos</SelectItem>
-                  <SelectItem value="debts">Deudas</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium">Tipo de importación:</span>
+                <Select value={type} onValueChange={(v) => setType(v as 'contacts' | 'debts')}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contacts">Contactos</SelectItem>
+                    <SelectItem value="debts">Deudas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  downloadFile('/imports/template', 'contactos-deudas-plantilla.csv')
+                    .then(() => toast.success('Plantilla descargada'))
+                    .catch((e) => toast.error(apiErrorMessage(e)))
+                }
+              >
+                <Download />
+                Descargar plantilla
+              </Button>
             </div>
 
             <button
@@ -221,6 +258,20 @@ export default function ContactImport() {
               className="hidden"
               onChange={(e) => handleFile(e.target.files?.[0])}
             />
+
+            <div className="rounded-lg border bg-muted/40 p-4">
+              <p className="mb-2 text-sm font-medium">Columnas soportadas</p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                La plantilla admite datos del estudiante y de sus deudas en un mismo archivo:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {TEMPLATE_COLUMNS.map((c) => (
+                  <code key={c} className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                    {c}
+                  </code>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

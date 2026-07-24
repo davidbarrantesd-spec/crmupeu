@@ -17,20 +17,37 @@ class ContactController extends Controller
     public function index(Request $request)
     {
         $contacts = Contact::query()
-            ->with(['tags', 'debts'])
+            ->visibleTo($request->user())
+            ->with(['tags', 'debts', 'campus', 'faculty', 'career', 'academicLevel'])
+            ->withSum(['debts as total_pending' => fn ($q) => $q->whereNotIn('status', ['paid', 'cancelled'])], 'pending_balance')
             ->when($request->search, fn ($q, $s) => $q->where(fn ($q2) => $q2
                 ->where('first_name', 'ilike', "%{$s}%")
                 ->orWhere('last_name', 'ilike', "%{$s}%")
                 ->orWhere('dni', 'ilike', "%{$s}%")
                 ->orWhere('phone', 'ilike', "%{$s}%")
-                ->orWhere('internal_code', 'ilike', "%{$s}%")))
+                ->orWhere('internal_code', 'ilike', "%{$s}%")
+                ->orWhere('student_code', 'ilike', "%{$s}%")
+                ->orWhere('id_persona', 'ilike', "%{$s}%")))
             ->when($request->status, fn ($q, $v) => $q->where('status', $v))
             ->when($request->segment, fn ($q, $v) => $q->where('segment', $v))
             ->when($request->city, fn ($q, $v) => $q->where('city', $v))
             ->when($request->tag, fn ($q, $v) => $q->whereHas('tags', fn ($q2) => $q2->where('name', $v)))
             ->when($request->filled('do_not_contact'), fn ($q) => $q->where('do_not_contact', $request->boolean('do_not_contact')))
             ->when($request->boolean('has_debt'), fn ($q) => $q->whereHas('debts', fn ($q2) => $q2->whereNotIn('status', ['paid', 'cancelled'])))
-            ->orderBy($request->get('sort', 'created_at'), $request->get('dir', 'desc'))
+            // Filtros académicos
+            ->when($request->campus_id, fn ($q, $v) => $q->where('campus_id', $v))
+            ->when($request->faculty_id, fn ($q, $v) => $q->where('faculty_id', $v))
+            ->when($request->career_id, fn ($q, $v) => $q->where('career_id', $v))
+            ->when($request->academic_level_id, fn ($q, $v) => $q->where('academic_level_id', $v))
+            ->when($request->modality, fn ($q, $v) => $q->where('modality', $v))
+            ->when($request->enrollment_status, fn ($q, $v) => $q->where('enrollment_status', $v))
+            ->when($request->payment_segment, fn ($q, $v) => $q->where('payment_segment', $v))
+            ->when($request->academic_period, fn ($q, $v) => $q->whereHas('debts', fn ($q2) => $q2->where('academic_period', $v)))
+            ->when(
+                $request->get('sort') === 'total_debt',
+                fn ($q) => $q->orderByDesc('total_pending'),
+                fn ($q) => $q->orderBy($request->get('sort', 'created_at'), $request->get('dir', 'desc'))
+            )
             ->paginate($request->integer('per_page', 15));
 
         return ContactResource::collection($contacts);
@@ -57,11 +74,24 @@ class ContactController extends Controller
 
     public function show(Contact $contact)
     {
-        return new ContactResource($contact->load(['tags', 'debts']));
+        $this->assertInScope($contact);
+
+        return new ContactResource($contact->load(['tags', 'debts', 'campus', 'faculty', 'career', 'academicLevel']));
+    }
+
+    /** Restricción dura de alcance también en accesos directos por uuid. */
+    protected function assertInScope(Contact $contact): void
+    {
+        abort_unless(
+            Contact::visibleTo(request()->user())->whereKey($contact->id)->exists(),
+            403, 'El contacto está fuera de tu alcance académico.'
+        );
     }
 
     public function update(Request $request, Contact $contact)
     {
+        $this->assertInScope($contact);
+
         $data = $this->validateContact($request, $contact);
 
         if (isset($data['phone'])) {
@@ -84,6 +114,7 @@ class ContactController extends Controller
 
     public function destroy(Contact $contact)
     {
+        $this->assertInScope($contact);
         $contact->delete();
 
         return response()->json(['data' => ['message' => 'Contacto eliminado.']]);
@@ -179,6 +210,15 @@ class ContactController extends Controller
             'phone_valid' => ['sometimes', 'boolean'],
             'tags' => ['sometimes', 'array'],
             'tags.*' => ['string', 'max:60'],
+            // Dimensión académica (integración LAMB)
+            'id_persona' => ['nullable', 'string', 'max:40', Rule::unique('contacts', 'id_persona')->ignore($contact?->id)],
+            'student_code' => ['nullable', 'string', 'max:40'],
+            'campus_id' => ['nullable', 'integer', 'exists:campuses,id'],
+            'faculty_id' => ['nullable', 'integer', 'exists:faculties,id'],
+            'career_id' => ['nullable', 'integer', 'exists:careers,id'],
+            'academic_level_id' => ['nullable', 'integer', 'exists:academic_levels,id'],
+            'modality' => ['nullable', Rule::in(AcademicCatalogController::MODALITIES)],
+            'enrollment_status' => ['nullable', Rule::in(['matriculado', 'no_matriculado'])],
         ]);
     }
 }

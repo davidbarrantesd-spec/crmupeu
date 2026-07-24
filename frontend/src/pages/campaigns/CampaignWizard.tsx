@@ -20,6 +20,8 @@ import {
   Upload,
 } from 'lucide-react'
 import { api, apiErrorMessage } from '@/api/client'
+import { useAcademicCatalogs, modalityLabel, enrollmentLabel } from '@/hooks/useAcademicCatalogs'
+import { segmentLabel } from '@/components/shared/SegmentBadge'
 import { formatMoney, fullName } from '@/lib/format'
 import type { ApiResource, Campaign, Paginated, Prompt, SegmentPreview, WhatsAppTemplate } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -63,6 +65,15 @@ const schema = z.object({
   consent_required: z.boolean(),
   exclude_broken_agreements: z.boolean(),
   max_attempts_lt: z.string().optional(),
+  // Paso 2 — filtros académicos
+  campus_id: z.string().optional(),
+  faculty_id: z.string().optional(),
+  career_id: z.string().optional(),
+  academic_level_id: z.string().optional(),
+  academic_period: z.string().optional(),
+  modalities: z.array(z.string()),
+  enrollment_statuses: z.array(z.string()),
+  payment_segments: z.array(z.string()),
   // Paso 3 — contenido
   tts_message: z.string().optional(),
   audio_url: z.string().optional(),
@@ -126,6 +137,7 @@ export default function CampaignWizard() {
   const [confirmLaunch, setConfirmLaunch] = useState(false)
   const audioInputRef = useRef<HTMLInputElement>(null)
   const pendingAction = useRef<'save' | 'schedule' | 'launch'>('save')
+  const { catalogs, careersForFaculty } = useAcademicCatalogs()
 
   const form = useForm<WizardForm>({
     resolver: zodResolver(schema),
@@ -143,6 +155,9 @@ export default function CampaignWizard() {
       debt_status: [],
       consent_required: true,
       exclude_broken_agreements: false,
+      modalities: [],
+      enrollment_statuses: [],
+      payment_segments: [],
       dtmf_1_action: 'confirm',
       dtmf_2_action: 'send_whatsapp',
       dtmf_3_action: 'transfer_advisor',
@@ -200,6 +215,14 @@ export default function CampaignWizard() {
       consent_required: sf.consent_required ?? true,
       exclude_broken_agreements: sf.exclude_broken_agreements ?? false,
       max_attempts_lt: sf.max_attempts_lt != null ? String(sf.max_attempts_lt) : '',
+      campus_id: sf.campus_id?.length ? String(sf.campus_id[0]) : '',
+      faculty_id: sf.faculty_id?.length ? String(sf.faculty_id[0]) : '',
+      career_id: sf.career_id?.length ? String(sf.career_id[0]) : '',
+      academic_level_id: sf.academic_level_id?.length ? String(sf.academic_level_id[0]) : '',
+      academic_period: sf.academic_period?.[0] ?? '',
+      modalities: sf.modality ?? [],
+      enrollment_statuses: sf.enrollment_status ?? [],
+      payment_segments: sf.payment_segment ?? [],
       tts_message: existing.tts_message ?? '',
       audio_url: existing.audio_url ?? '',
       dtmf_1_action: dtmfEntry('1')?.action ?? 'confirm',
@@ -253,6 +276,15 @@ export default function CampaignWizard() {
       consent_required: values.consent_required,
       exclude_broken_agreements: values.exclude_broken_agreements,
       max_attempts_lt: values.max_attempts_lt ? Number(values.max_attempts_lt) : null,
+      // Filtros académicos
+      campus_id: values.campus_id ? [Number(values.campus_id)] : [],
+      faculty_id: values.faculty_id ? [Number(values.faculty_id)] : [],
+      career_id: values.career_id ? [Number(values.career_id)] : [],
+      academic_level_id: values.academic_level_id ? [Number(values.academic_level_id)] : [],
+      academic_period: values.academic_period ? [values.academic_period] : [],
+      modality: values.modalities,
+      enrollment_status: values.enrollment_statuses,
+      payment_segment: values.payment_segments,
     }
   }
 
@@ -602,6 +634,168 @@ export default function CampaignWizard() {
                   />
                   Excluir acuerdos incumplidos
                 </label>
+              </div>
+
+              {/* Filtros académicos */}
+              <div className="rounded-lg border p-4">
+                <p className="mb-3 text-sm font-medium">Filtros académicos</p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <FormField label="Campus">
+                    <Select
+                      value={values.campus_id || NONE}
+                      onValueChange={(v) => form.setValue('campus_id', v === NONE ? '' : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Todos los campus</SelectItem>
+                        {catalogs.campuses.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Facultad">
+                    <Select
+                      value={values.faculty_id || NONE}
+                      onValueChange={(v) => {
+                        const next = v === NONE ? '' : v
+                        form.setValue('faculty_id', next)
+                        const careerId = form.getValues('career_id')
+                        if (careerId && !careersForFaculty(next || undefined).some((c) => String(c.id) === careerId)) {
+                          form.setValue('career_id', '')
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Todas las facultades</SelectItem>
+                        {catalogs.faculties.map((f) => (
+                          <SelectItem key={f.id} value={String(f.id)}>
+                            {f.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Carrera">
+                    <Select
+                      value={values.career_id || NONE}
+                      onValueChange={(v) => form.setValue('career_id', v === NONE ? '' : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Todas las carreras</SelectItem>
+                        {careersForFaculty(values.faculty_id || undefined).map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Nivel académico">
+                    <Select
+                      value={values.academic_level_id || NONE}
+                      onValueChange={(v) => form.setValue('academic_level_id', v === NONE ? '' : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Todos los niveles</SelectItem>
+                        {catalogs.levels.map((l) => (
+                          <SelectItem key={l.id} value={String(l.id)}>
+                            {l.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Periodo académico">
+                    <Select
+                      value={values.academic_period || NONE}
+                      onValueChange={(v) => form.setValue('academic_period', v === NONE ? '' : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Todos los periodos</SelectItem>
+                        {catalogs.periods.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  <FormField label="Modalidad">
+                    <div className="flex flex-wrap gap-3 pt-1.5">
+                      {catalogs.modalities.map((m) => (
+                        <label key={m} className="flex cursor-pointer items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={values.modalities.includes(m)}
+                            onCheckedChange={(checked) =>
+                              form.setValue(
+                                'modalities',
+                                checked ? [...values.modalities, m] : values.modalities.filter((x) => x !== m),
+                              )
+                            }
+                          />
+                          {modalityLabel(m)}
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                  <FormField label="Estado de matrícula" className="sm:col-span-1">
+                    <div className="flex flex-wrap gap-3 pt-1.5">
+                      {(['matriculado', 'no_matriculado'] as const).map((s) => (
+                        <label key={s} className="flex cursor-pointer items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={values.enrollment_statuses.includes(s)}
+                            onCheckedChange={(checked) =>
+                              form.setValue(
+                                'enrollment_statuses',
+                                checked
+                                  ? [...values.enrollment_statuses, s]
+                                  : values.enrollment_statuses.filter((x) => x !== s),
+                              )
+                            }
+                          />
+                          {enrollmentLabel(s)}
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                  <FormField label="Segmento de pago" className="sm:col-span-2">
+                    <div className="flex flex-wrap gap-3 pt-1.5">
+                      {catalogs.segments.map((s) => (
+                        <label key={s.key} className="flex cursor-pointer items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={values.payment_segments.includes(s.key)}
+                            onCheckedChange={(checked) =>
+                              form.setValue(
+                                'payment_segments',
+                                checked
+                                  ? [...values.payment_segments, s.key]
+                                  : values.payment_segments.filter((x) => x !== s.key),
+                              )
+                            }
+                          />
+                          {s.label || segmentLabel(s.key)}
+                        </label>
+                      ))}
+                    </div>
+                  </FormField>
+                </div>
               </div>
 
               <div className="rounded-lg border border-dashed p-4">

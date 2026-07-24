@@ -8,12 +8,14 @@ import { MoreHorizontal, Pencil, Plus, Trash2, UserCog, UserCheck, UserX } from 
 import { api, apiErrorMessage } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useDebounce } from '@/hooks/useDebounce'
+import { useAcademicCatalogs } from '@/hooks/useAcademicCatalogs'
 import { formatDate, initials } from '@/lib/format'
-import type { Paginated, Role, User } from '@/types'
+import type { ApiResource, Paginated, Role, User, UserScope } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -41,6 +43,23 @@ const userSchema = z.object({
 
 type UserForm = z.infer<typeof userSchema>
 
+/** Fila editable de alcance académico (valores como string; '' = comodín "Todos"). */
+interface ScopeRow {
+  campus_id: string
+  faculty_id: string
+  career_id: string
+}
+
+const ALL = '__all__'
+
+function toScopeRows(scopes: UserScope[] | undefined): ScopeRow[] {
+  return (scopes ?? []).map((s) => ({
+    campus_id: s.campus_id != null ? String(s.campus_id) : '',
+    faculty_id: s.faculty_id != null ? String(s.faculty_id) : '',
+    career_id: s.career_id != null ? String(s.career_id) : '',
+  }))
+}
+
 function roleNames(u: User): string[] {
   return (u.roles ?? []).map((r) => (typeof r === 'string' ? r : r.name))
 }
@@ -48,12 +67,14 @@ function roleNames(u: User): string[] {
 export default function Users() {
   const queryClient = useQueryClient()
   const hasPermission = useAuthStore((s) => s.hasPermission)
+  const { catalogs, careersForFaculty } = useAcademicCatalogs()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<User | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
+  const [scopes, setScopes] = useState<ScopeRow[]>([])
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['users', { page, search: debouncedSearch }],
@@ -92,12 +113,27 @@ export default function Users() {
           }
         : { name: '', email: '', phone: '', password: '', status: 'active', roles: [] },
     )
+    setScopes(toScopeRows(user?.scopes))
     setFormOpen(true)
+    // El listado puede no incluir scopes: los traemos del detalle
+    if (user) {
+      api
+        .get<ApiResource<User>>(`/users/${user.uuid}`)
+        .then((res) => setScopes(toScopeRows(res.data.data.scopes)))
+        .catch(() => undefined)
+    }
   }
 
   const save = useMutation({
     mutationFn: (values: UserForm) => {
-      const payload: Record<string, unknown> = { ...values }
+      const payload: Record<string, unknown> = {
+        ...values,
+        scopes: scopes.map((s) => ({
+          campus_id: s.campus_id ? Number(s.campus_id) : null,
+          faculty_id: s.faculty_id ? Number(s.faculty_id) : null,
+          career_id: s.career_id ? Number(s.career_id) : null,
+        })),
+      }
       if (!values.password) delete payload.password
       return editing ? api.put(`/users/${editing.uuid}`, payload) : api.post('/users', payload)
     },
@@ -232,7 +268,7 @@ export default function Users() {
       />
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar usuario' : 'Nuevo usuario'}</DialogTitle>
           </DialogHeader>
@@ -270,6 +306,101 @@ export default function Users() {
                     {r.name}
                   </label>
                 ))}
+              </div>
+            </FormField>
+            <FormField
+              label="Alcance académico"
+              hint="Sin filas = acceso a todo. Cada fila da acceso a ese ámbito (los campos vacíos son comodín)."
+            >
+              <div className="space-y-2 rounded-lg border p-3">
+                {scopes.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Acceso a toda la cartera (sin restricción académica).</p>
+                )}
+                {scopes.map((row, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={row.campus_id || ALL}
+                      onValueChange={(v) =>
+                        setScopes((prev) => prev.map((r, j) => (j === i ? { ...r, campus_id: v === ALL ? '' : v } : r)))
+                      }
+                    >
+                      <SelectTrigger className="w-40 flex-1">
+                        <SelectValue placeholder="Campus" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL}>Todos los campus</SelectItem>
+                        {catalogs.campuses.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={row.faculty_id || ALL}
+                      onValueChange={(v) =>
+                        setScopes((prev) =>
+                          prev.map((r, j) => {
+                            if (j !== i) return r
+                            const faculty_id = v === ALL ? '' : v
+                            const keepCareer =
+                              r.career_id &&
+                              careersForFaculty(faculty_id || undefined).some((c) => String(c.id) === r.career_id)
+                            return { ...r, faculty_id, career_id: keepCareer ? r.career_id : '' }
+                          }),
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-40 flex-1">
+                        <SelectValue placeholder="Facultad" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL}>Todas las facultades</SelectItem>
+                        {catalogs.faculties.map((f) => (
+                          <SelectItem key={f.id} value={String(f.id)}>
+                            {f.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={row.career_id || ALL}
+                      onValueChange={(v) =>
+                        setScopes((prev) => prev.map((r, j) => (j === i ? { ...r, career_id: v === ALL ? '' : v } : r)))
+                      }
+                    >
+                      <SelectTrigger className="w-40 flex-1">
+                        <SelectValue placeholder="Carrera" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL}>Todas las carreras</SelectItem>
+                        {careersForFaculty(row.faculty_id || undefined).map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="iconSm"
+                      title="Quitar ámbito"
+                      onClick={() => setScopes((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      <Trash2 className="text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScopes((prev) => [...prev, { campus_id: '', faculty_id: '', career_id: '' }])}
+                >
+                  <Plus />
+                  Agregar ámbito
+                </Button>
               </div>
             </FormField>
             <label className="flex cursor-pointer items-center gap-2 text-sm">

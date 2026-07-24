@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -15,11 +15,12 @@ import {
   Upload,
   Users,
   PhoneOff,
+  ArrowDownWideNarrow,
 } from 'lucide-react'
 import { api, apiErrorMessage, downloadFile } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useDebounce } from '@/hooks/useDebounce'
-import { formatMoney, fullName } from '@/lib/format'
+import { catalogName, formatMoney, fullName } from '@/lib/format'
 import type { Contact, Paginated } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +38,13 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { FilterBar } from '@/components/shared/FilterBar'
 import { DataTable, type Column } from '@/components/shared/DataTable'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { SegmentBadge } from '@/components/shared/SegmentBadge'
+import {
+  AcademicFilters,
+  academicFilterParams,
+  hasAcademicFilters,
+  type AcademicFilterValues,
+} from '@/components/shared/AcademicFilters'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ContactFormDialog } from '@/components/contacts/ContactFormDialog'
 import { CallDialog } from '@/components/contacts/CallDialog'
@@ -47,6 +55,7 @@ export default function Contacts() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const hasPermission = useAuthStore((s) => s.hasPermission)
+  const [searchParams] = useSearchParams()
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -56,6 +65,14 @@ export default function Contacts() {
   const [tag, setTag] = useState('')
   const [hasDebt, setHasDebt] = useState(ANY)
   const [doNotContact, setDoNotContact] = useState(ANY)
+  const [academic, setAcademic] = useState<AcademicFilterValues>(() => ({
+    payment_segment: searchParams.get('payment_segment') ?? '',
+    campus_id: searchParams.get('campus_id') ?? '',
+    faculty_id: searchParams.get('faculty_id') ?? '',
+    career_id: searchParams.get('career_id') ?? '',
+    academic_period: searchParams.get('academic_period') ?? '',
+  }))
+  const [sortByDebt, setSortByDebt] = useState(false)
   const [sort, setSort] = useState('')
 
   const debouncedSearch = useDebounce(search)
@@ -78,7 +95,8 @@ export default function Contacts() {
     tag: debouncedTag || undefined,
     has_debt: hasDebt === ANY ? undefined : hasDebt,
     do_not_contact: doNotContact === ANY ? undefined : doNotContact,
-    sort: sort || undefined,
+    ...academicFilterParams(academic),
+    sort: sortByDebt ? 'total_debt' : sort || undefined,
   }
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -108,7 +126,15 @@ export default function Contacts() {
   }
 
   const hasActiveFilters =
-    !!search || status !== ANY || !!segment || !!city || !!tag || hasDebt !== ANY || doNotContact !== ANY
+    !!search ||
+    status !== ANY ||
+    !!segment ||
+    !!city ||
+    !!tag ||
+    hasDebt !== ANY ||
+    doNotContact !== ANY ||
+    hasAcademicFilters(academic) ||
+    sortByDebt
 
   const clearFilters = () => {
     setSearch('')
@@ -118,6 +144,8 @@ export default function Contacts() {
     setTag('')
     setHasDebt(ANY)
     setDoNotContact(ANY)
+    setAcademic({})
+    setSortByDebt(false)
     setPage(1)
   }
 
@@ -155,11 +183,27 @@ export default function Contacts() {
         </div>
       ),
     },
-    { key: 'city', header: 'Ciudad', render: (c) => c.city ?? '—' },
     {
-      key: 'segment',
+      key: 'career',
+      header: 'Carrera',
+      render: (c) => (
+        <div>
+          <p className="text-sm">{catalogName(c.career)}</p>
+          <p className="text-xs text-muted-foreground">{catalogName(c.campus) !== '—' ? catalogName(c.campus) : ''}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'payment_segment',
       header: 'Segmento',
-      render: (c) => (c.segment ? <Badge variant="secondary">{c.segment}</Badge> : '—'),
+      render: (c) =>
+        c.payment_segment ? (
+          <SegmentBadge segment={c.payment_segment} />
+        ) : c.segment ? (
+          <Badge variant="secondary">{c.segment}</Badge>
+        ) : (
+          '—'
+        ),
     },
     {
       key: 'tags',
@@ -204,7 +248,9 @@ export default function Contacts() {
       className: 'text-right',
       render: (c) => {
         const total =
-          c.total_debt ?? (c.debts ?? []).reduce((acc, d) => acc + parseFloat(String(d.current_balance ?? 0)), 0)
+          c.total_pending ??
+          c.total_debt ??
+          (c.debts ?? []).reduce((acc, d) => acc + parseFloat(String(d.current_balance ?? 0)), 0)
         return <span className="font-medium tabular-nums">{formatMoney(total)}</span>
       },
     },
@@ -340,6 +386,20 @@ export default function Contacts() {
             <SelectItem value="0">Contactables</SelectItem>
           </SelectContent>
         </Select>
+        <AcademicFilters
+          value={academic}
+          onChange={(v) => { setAcademic(v); setPage(1) }}
+          fields={['campus_id', 'faculty_id', 'career_id', 'academic_level_id', 'modality', 'payment_segment', 'enrollment_status']}
+        />
+        <Button
+          variant={sortByDebt ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => { setSortByDebt((v) => !v); setPage(1) }}
+          title="Ordenar por deuda total descendente"
+        >
+          <ArrowDownWideNarrow />
+          Más deudores primero
+        </Button>
       </FilterBar>
 
       <DataTable

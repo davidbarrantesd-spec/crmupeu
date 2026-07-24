@@ -34,10 +34,15 @@ class UserController extends Controller
             'status' => ['sometimes', Rule::in(['active', 'inactive'])],
             'roles' => ['required', 'array', 'min:1'],
             'roles.*' => ['string', 'exists:roles,name'],
+            'scopes' => ['sometimes', 'array'],
+            'scopes.*.campus_id' => ['nullable', 'integer', 'exists:campuses,id'],
+            'scopes.*.faculty_id' => ['nullable', 'integer', 'exists:faculties,id'],
+            'scopes.*.career_id' => ['nullable', 'integer', 'exists:careers,id'],
         ]);
 
-        $user = User::create(collect($data)->except('roles')->all());
+        $user = User::create(collect($data)->except(['roles', 'scopes'])->all());
         $user->syncRoles($data['roles']);
+        $this->syncScopes($user, $data['scopes'] ?? null);
 
         AuditLog::record('created', 'users', $user, ['new_values' => ['email' => $user->email, 'roles' => $data['roles']]]);
 
@@ -59,6 +64,10 @@ class UserController extends Controller
             'status' => ['sometimes', Rule::in(['active', 'inactive'])],
             'roles' => ['sometimes', 'array'],
             'roles.*' => ['string', 'exists:roles,name'],
+            'scopes' => ['sometimes', 'array'],
+            'scopes.*.campus_id' => ['nullable', 'integer', 'exists:campuses,id'],
+            'scopes.*.faculty_id' => ['nullable', 'integer', 'exists:faculties,id'],
+            'scopes.*.career_id' => ['nullable', 'integer', 'exists:careers,id'],
         ]);
 
         $old = ['roles' => $user->getRoleNames(), 'status' => $user->status];
@@ -67,7 +76,11 @@ class UserController extends Controller
             unset($data['password']);
         }
 
-        $user->update(collect($data)->except('roles')->all());
+        $user->update(collect($data)->except(['roles', 'scopes'])->all());
+
+        if (array_key_exists('scopes', $data)) {
+            $this->syncScopes($user, $data['scopes']);
+        }
 
         if (isset($data['roles'])) {
             $user->syncRoles($data['roles']);
@@ -94,5 +107,31 @@ class UserController extends Controller
         AuditLog::record('deleted', 'users', $user);
 
         return response()->json(['data' => ['message' => 'Usuario eliminado.']]);
+    }
+
+    /**
+     * Reemplaza el alcance académico completo del usuario. Filas con los tres
+     * campos en null se descartan (equivaldrían a acceso global explícito,
+     * que se representa con CERO filas).
+     */
+    protected function syncScopes(User $user, ?array $scopes): void
+    {
+        if ($scopes === null) {
+            return;
+        }
+
+        $user->scopes()->delete();
+
+        foreach ($scopes as $scope) {
+            $row = array_filter([
+                'campus_id' => $scope['campus_id'] ?? null,
+                'faculty_id' => $scope['faculty_id'] ?? null,
+                'career_id' => $scope['career_id'] ?? null,
+            ]);
+
+            if ($row !== []) {
+                $user->scopes()->create($row);
+            }
+        }
     }
 }

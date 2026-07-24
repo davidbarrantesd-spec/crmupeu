@@ -31,6 +31,18 @@ class User extends Authenticatable
         ];
     }
 
+
+    public function scopes(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(UserScope::class);
+    }
+
+    /** Alcance académico duro: sin filas de user_scopes = acceso global. */
+    public function hasGlobalScope_(): bool
+    {
+        return $this->scopes()->count() === 0;
+    }
+
     public function isActive(): bool
     {
         return $this->status === 'active';

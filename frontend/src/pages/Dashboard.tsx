@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format, subDays } from 'date-fns'
 import {
@@ -20,6 +21,10 @@ import {
   Target,
   PiggyBank,
   RefreshCw,
+  GraduationCap,
+  Building2,
+  AlertTriangle,
+  Scale,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -41,11 +46,19 @@ import {
 import { api } from '@/api/client'
 import { formatMoney, formatNumber, formatPercent, formatDate } from '@/lib/format'
 import { statusLabel } from '@/components/shared/StatusBadge'
-import type { ApiResource, DashboardData } from '@/types'
+import { SegmentBadge, segmentLabel } from '@/components/shared/SegmentBadge'
+import {
+  AcademicFilters,
+  academicFilterParams,
+  hasAcademicFilters,
+  type AcademicFilterValues,
+} from '@/components/shared/AcademicFilters'
+import type { AcademicDashboard, ApiResource, DashboardData } from '@/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 
@@ -259,7 +272,200 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </ChartCard>
       </div>
+
+      {/* Panorama académico */}
+      <AcademicSection />
     </div>
+  )
+}
+
+const ACADEMIC_KPIS: { key: keyof AcademicDashboard['kpis']; label: string; icon: React.ComponentType<{ className?: string }>; format: (v: number | string) => string; color: string }[] = [
+  { key: 'students_with_debt', label: 'Estudiantes con deuda', icon: GraduationCap, format: formatNumber, color: 'text-indigo-500' },
+  { key: 'total_pending', label: 'Deuda total', icon: Wallet, format: formatMoney, color: 'text-rose-500' },
+  { key: 'total_overdue', label: 'Deuda vencida', icon: AlertTriangle, format: formatMoney, color: 'text-amber-500' },
+  { key: 'avg_debt', label: 'Deuda promedio', icon: Scale, format: formatMoney, color: 'text-cyan-500' },
+]
+
+function AcademicSection() {
+  const navigate = useNavigate()
+  const [filters, setFilters] = useState<AcademicFilterValues>({})
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['dashboard', 'academic', filters],
+    queryFn: async () => {
+      const res = await api.get<ApiResource<AcademicDashboard>>('/dashboard/academic', {
+        params: academicFilterParams(filters),
+      })
+      return res.data.data
+    },
+  })
+
+  return (
+    <section className="mt-8">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <GraduationCap className="h-5 w-5 text-primary" />
+            Panorama académico
+          </h2>
+          <p className="text-sm text-muted-foreground">Deuda estudiantil por campus, facultad, carrera y ciclo</p>
+        </div>
+      </div>
+
+      {/* Filtros académicos */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <AcademicFilters
+          value={filters}
+          onChange={setFilters}
+          fields={['campus_id', 'faculty_id', 'career_id', 'academic_period']}
+        />
+        {hasAcademicFilters(filters) && (
+          <Button variant="ghost" size="sm" onClick={() => setFilters({})}>
+            Limpiar filtros
+          </Button>
+        )}
+      </div>
+
+      {isError && (
+        <EmptyState
+          icon={Building2}
+          title="Error al cargar el panorama académico"
+          description="No se pudo obtener la información del servidor."
+          action={<Button variant="outline" onClick={() => refetch()}>Reintentar</Button>}
+        />
+      )}
+
+      {/* KPIs académicos */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {isLoading && Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+        {!isLoading &&
+          data &&
+          ACADEMIC_KPIS.map((def) => (
+            <Card key={def.key}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">{def.label}</p>
+                  <def.icon className={`h-4 w-4 ${def.color}`} />
+                </div>
+                <p className="mt-2 text-xl font-bold tracking-tight">{def.format(data.kpis[def.key])}</p>
+              </CardContent>
+            </Card>
+          ))}
+      </div>
+
+      {/* Segmentos de pago */}
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {isLoading && Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+        {!isLoading &&
+          (data?.by_segment ?? []).map((s) => (
+            <button
+              key={s.segment}
+              type="button"
+              className="cursor-pointer rounded-lg border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-accent"
+              onClick={() => navigate(`/contacts?payment_segment=${encodeURIComponent(s.segment)}`)}
+              title={`Ver contactos del segmento ${s.label || segmentLabel(s.segment)}`}
+            >
+              <SegmentBadge segment={s.segment} />
+              <p className="mt-2 text-xl font-bold tabular-nums">{formatNumber(s.count)}</p>
+              <p className="text-xs text-muted-foreground tabular-nums">{formatMoney(s.amount)}</p>
+            </button>
+          ))}
+      </div>
+
+      {/* Gráficos por campus / facultad */}
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ChartCard title="Deuda por campus" loading={isLoading} empty={!data?.by_campus?.length}>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={data?.by_campus ?? []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={11} />
+              <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(v)} />
+              <RechartsTooltip
+                contentStyle={tooltipStyle}
+                formatter={(v, name) => (name === 'Monto' ? [formatMoney(Number(v)), name] : [formatNumber(Number(v)), name])}
+              />
+              <Legend />
+              <Bar dataKey="amount" name="Monto" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" name="Estudiantes" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Deuda por facultad" loading={isLoading} empty={!data?.by_faculty?.length}>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={data?.by_faculty ?? []} layout="vertical" margin={{ left: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+              <XAxis type="number" stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(v)} />
+              <YAxis type="category" dataKey="name" stroke="var(--muted-foreground)" fontSize={11} width={140} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v) => [formatMoney(Number(v)), 'Monto']} />
+              <Bar dataKey="amount" name="Monto" fill="#a855f7" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      {/* Top deudores + deuda por ciclo */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Top 10 estudiantes más deudores</CardTitle>
+          </CardHeader>
+          <CardContent className="px-0 pb-0">
+            {isLoading ? (
+              <Skeleton className="mx-6 mb-6 h-[280px]" />
+            ) : !data?.top_debtors?.length ? (
+              <EmptyState title="Sin datos" description="No hay deudores para los filtros seleccionados." className="h-[280px] py-0" />
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Estudiante</TableHead>
+                      <TableHead className="text-right">Deuda total</TableHead>
+                      <TableHead className="text-right">Ciclos</TableHead>
+                      <TableHead>Ciclo más antiguo</TableHead>
+                      <TableHead>Segmento</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.top_debtors.slice(0, 10).map((d) => (
+                      <TableRow key={d.uuid}>
+                        <TableCell>
+                          <Link to={`/contacts/${d.uuid}`} className="font-medium text-primary hover:underline">
+                            {d.full_name}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            {[d.career, d.campus].filter(Boolean).join(' · ') || '—'}
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums">{formatMoney(d.total_pending)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatNumber(d.periods_count)}</TableCell>
+                        <TableCell>{d.oldest_period ?? '—'}</TableCell>
+                        <TableCell>
+                          <SegmentBadge segment={d.payment_segment} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <ChartCard title="Deuda por ciclo" loading={isLoading} empty={!data?.by_period?.length}>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={data?.by_period ?? []}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="period" stroke="var(--muted-foreground)" fontSize={11} />
+              <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(v)} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v) => [formatMoney(Number(v)), 'Deuda']} />
+              <Area type="monotone" dataKey="amount" name="Deuda" stroke="#ef4444" fill="#ef444433" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+    </section>
   )
 }
 
