@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Phone, FileText, ListTree } from 'lucide-react'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
@@ -46,6 +46,7 @@ export default function Calls() {
   }
 
   const { data, isLoading, isError, refetch } = useQuery({
+    placeholderData: keepPreviousData,
     queryKey: ['calls', params],
     queryFn: async () => {
       const res = await api.get<Paginated<Call>>('/calls', { params })
@@ -57,6 +58,7 @@ export default function Calls() {
   useEchoInvalidate('calls', ['CallUpdated'], [['calls']])
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
+    placeholderData: keepPreviousData,
     queryKey: ['call', selected?.uuid],
     queryFn: async () => {
       const res = await api.get<ApiResource<Call>>(`/calls/${selected?.uuid}`)

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { format, subDays } from 'date-fns'
 import {
   Users,
@@ -97,6 +97,7 @@ export default function Dashboard() {
   const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'))
 
   const { data, isLoading, isError, refetch } = useQuery({
+    placeholderData: keepPreviousData,
     queryKey: ['dashboard', dateFrom, dateTo],
     queryFn: async () => {
       const res = await api.get<ApiResource<DashboardData>>('/dashboard', {
@@ -291,6 +292,7 @@ function AcademicSection() {
   const [filters, setFilters] = useState<AcademicFilterValues>({})
 
   const { data, isLoading, isError, refetch } = useQuery({
+    placeholderData: keepPreviousData,
     queryKey: ['dashboard', 'academic', filters],
     queryFn: async () => {
       const res = await api.get<ApiResource<AcademicDashboard>>('/dashboard/academic', {

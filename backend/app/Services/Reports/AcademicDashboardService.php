@@ -92,25 +92,35 @@ class AcademicDashboardService
             ->orderBy('debts.academic_period')
             ->get();
 
-        $topDebtors = Contact::query()
+        $topContacts = Contact::query()
             ->visibleTo($user)
             ->with(['career:id,name', 'campus:id,name'])
             ->withSum(['debts as total_pending' => fn ($q) => $q->whereNotIn('status', ['paid', 'cancelled'])], 'pending_balance')
             ->whereHas('debts', fn ($q) => $q->whereNotIn('status', ['paid', 'cancelled'])->where('pending_balance', '>', 0))
             ->orderByDesc('total_pending')
             ->limit(10)
-            ->get()
-            ->map(fn ($c) => [
-                'uuid' => $c->uuid,
-                'full_name' => $c->full_name,
-                'career' => $c->career?->name,
-                'campus' => $c->campus?->name,
-                'total_pending' => (float) $c->total_pending,
-                'periods_count' => $c->debts()->whereNotIn('status', ['paid', 'cancelled'])
-                    ->whereNotNull('academic_period')->distinct()->count('academic_period'),
-                'oldest_period' => $c->debts()->whereNotIn('status', ['paid', 'cancelled'])->min('academic_period'),
-                'payment_segment' => $c->payment_segment,
-            ]);
+            ->get();
+
+        // Agregados de ciclos en UNA consulta (evita N+1: con BD remota cada
+        // roundtrip extra se paga caro).
+        $periodStats = DB::table('debts')
+            ->whereIn('contact_id', $topContacts->pluck('id'))
+            ->whereNull('deleted_at')
+            ->whereNotIn('status', ['paid', 'cancelled'])
+            ->groupBy('contact_id')
+            ->selectRaw('contact_id, count(distinct academic_period) as periods_count, min(academic_period) as oldest_period')
+            ->get()->keyBy('contact_id');
+
+        $topDebtors = $topContacts->map(fn ($c) => [
+            'uuid' => $c->uuid,
+            'full_name' => $c->full_name,
+            'career' => $c->career?->name,
+            'campus' => $c->campus?->name,
+            'total_pending' => (float) $c->total_pending,
+            'periods_count' => (int) ($periodStats[$c->id]->periods_count ?? 0),
+            'oldest_period' => $periodStats[$c->id]->oldest_period ?? null,
+            'payment_segment' => $c->payment_segment,
+        ]);
 
         $studentsWithDebt = (int) ($kpis->students_with_debt ?? 0);
         $totalPending = (float) ($kpis->total_pending ?? 0);

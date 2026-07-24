@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Wallet, AlertTriangle, TrendingDown, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { api, apiErrorMessage } from '@/api/client'
@@ -68,6 +68,7 @@ export default function Debts() {
   }
 
   const { data, isLoading, isError, refetch } = useQuery({
+    placeholderData: keepPreviousData,
     queryKey: ['debts', params],
     queryFn: async () => {
       const res = await api.get<Paginated<Debt> & { totals?: { total_balance?: number; total_original?: number; overdue_count?: number } }>('/debts', { params })

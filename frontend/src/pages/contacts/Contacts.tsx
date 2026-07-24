@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   Ban,
@@ -100,6 +100,7 @@ export default function Contacts() {
   }
 
   const { data, isLoading, isError, refetch } = useQuery({
+    placeholderData: keepPreviousData,
     queryKey: ['contacts', params],
     queryFn: async () => {
       const res = await api.get<Paginated<Contact>>('/contacts', { params })
