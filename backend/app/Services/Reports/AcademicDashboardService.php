@@ -50,15 +50,23 @@ class AcademicDashboardService
                     ->whereNotIn('status', ['paid', 'cancelled'])->sum('pending_balance')),
             ])->values();
 
-        // buen_pagador no tiene deuda pendiente: contarlo aparte
-        $goodPayers = Contact::visibleTo($user)->where('payment_segment', 'buen_pagador')->count();
-        if ($goodPayers > 0 && ! $bySegment->contains(fn ($s) => $s['segment'] === 'buen_pagador')) {
-            $bySegment->push([
-                'segment' => 'buen_pagador',
-                'label' => AcademicCatalogController::SEGMENTS['buen_pagador'],
-                'count' => $goodPayers,
-                'amount' => 0.0,
-            ]);
+        // buen_pagador y pagador_tardio no tienen deuda pendiente (se clasifican
+        // por historial): contarlos aparte para que sus tarjetas no desaparezcan.
+        foreach (['buen_pagador', 'pagador_tardio'] as $historical) {
+            if ($bySegment->contains(fn ($s) => $s['segment'] === $historical)) {
+                continue;
+            }
+
+            $count = Contact::visibleTo($user)->where('payment_segment', $historical)->count();
+
+            if ($count > 0) {
+                $bySegment->push([
+                    'segment' => $historical,
+                    'label' => AcademicCatalogController::SEGMENTS[$historical],
+                    'count' => $count,
+                    'amount' => 0.0,
+                ]);
+            }
         }
 
         $byGroup = fn (string $table, string $fk) => (clone $pending)
