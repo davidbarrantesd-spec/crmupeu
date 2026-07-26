@@ -16,6 +16,7 @@ const PromptsPage = lazy(() => import('./pages/Prompts'))
 const AgreementsPage = lazy(() => import('./pages/Agreements'))
 const FollowUpsPage = lazy(() => import('./pages/FollowUps'))
 const WhatsAppPage = lazy(() => import('./pages/WhatsApp'))
+const AnalyticsPage = lazy(() => import('./pages/Analytics'))
 const ReportsPage = lazy(() => import('./pages/Reports'))
 const UsersPage = lazy(() => import('./pages/Users'))
 const RolesPage = lazy(() => import('./pages/Roles'))
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
       { path: 'agreements', element: <AgreementsPage /> },
       { path: 'follow-ups', element: <FollowUpsPage /> },
       { path: 'whatsapp', element: <WhatsAppPage /> },
+      { path: 'analytics', element: <AnalyticsPage /> },
       { path: 'reports', element: <ReportsPage /> },
       { path: 'users', element: <UsersPage /> },
       { path: 'roles', element: <RolesPage /> },

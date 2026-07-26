@@ -11,6 +11,7 @@ import {
   ListTodo,
   MessageCircle,
   BarChart3,
+  TrendingUp,
   ScrollText,
   UserCog,
   ShieldCheck,
@@ -93,6 +94,8 @@ export function Sidebar() {
     {
       title: 'Análisis',
       items: [
+        // Mismo acceso que el Panel (sin permiso específico)
+        { to: '/analytics', label: 'Análisis', icon: TrendingUp },
         { to: '/reports', label: 'Reportes', icon: BarChart3, permission: 'reports.view' },
         { to: '/audit', label: 'Auditoría', icon: ScrollText, permission: 'audit.view' },
       ],

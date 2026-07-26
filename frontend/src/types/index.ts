@@ -93,6 +93,11 @@ export interface PaymentBehaviorDef {
   label: string
 }
 
+export interface CreditRatingDef {
+  key: string
+  label: string
+}
+
 export interface AcademicCatalogs {
   campuses: Campus[]
   faculties: Faculty[]
@@ -101,9 +106,13 @@ export interface AcademicCatalogs {
   periods: string[]
   segments: PaymentSegmentDef[]
   behaviors: PaymentBehaviorDef[]
+  ratings: CreditRatingDef[]
 }
 
 export type EnrollmentStatus = 'matriculado' | 'no_matriculado'
+
+/** Calificación crediticia estilo SBS (orden fijo de riesgo). */
+export type CreditRating = 'normal' | 'cpp' | 'deficiente' | 'dudoso' | 'perdida'
 
 export type PaymentTrend = 'mejorando' | 'estable' | 'empeorando'
 
@@ -170,6 +179,8 @@ export interface Contact {
   payment_segment?: string | null
   // Perfil de comportamiento de pago
   payment_behavior?: string | null
+  credit_rating?: CreditRating | string | null
+  current_delay_days?: number | null
   payment_score?: number | null
   on_time_rate?: number | null
   avg_delay_days?: number | null
@@ -324,6 +335,58 @@ export interface AcademicDashboard {
   by_behavior: AcademicBehaviorStat[]
   behavior_by_year: BehaviorByYearStat[]
   score_by_career: CareerScoreStat[]
+}
+
+// ——— Análisis de riesgo crediticio (dashboard/credit) ———
+
+export interface CreditKpis {
+  students_rated: number
+  cartera_total: number | string
+  cartera_en_riesgo: number | string
+  pct_en_riesgo: number
+  perdida_esperada: number | string
+  avg_score: number
+}
+
+export type StrategyPriority = 'baja' | 'media' | 'alta' | 'critica'
+
+export interface RatingStrategy {
+  titulo: string
+  canal: string
+  campana: string
+  prioridad: StrategyPriority | string
+  detalle: string
+}
+
+export interface RatingStat {
+  rating: CreditRating | string
+  label: string
+  count: number
+  amount: number | string
+  pct_amount: number
+  provision_rate: number
+  expected_loss: number | string
+  strategy: RatingStrategy
+}
+
+export interface RatingByYearStat {
+  year: number
+  credit_rating: CreditRating | string
+  count: number
+}
+
+export interface RecoveryPeriodStat {
+  period: string
+  billed: number | string
+  recovered: number | string
+  recovery_rate: number
+}
+
+export interface CreditAnalysis {
+  kpis: CreditKpis
+  by_rating: RatingStat[]
+  rating_by_year: RatingByYearStat[]
+  recovery_by_period: RecoveryPeriodStat[]
 }
 
 export interface DtmfOption {
