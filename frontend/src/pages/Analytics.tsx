@@ -555,17 +555,17 @@ function CreditReportCard({
   const strategy = byRating.find((r) => String(r.rating) === String(contact.credit_rating ?? ''))?.strategy
 
   const metrics: { label: string; value: React.ReactNode }[] = [
-    { label: 'Paga a tiempo', value: contact.on_time_rate != null ? formatPercent(contact.on_time_rate) : '—' },
+    { label: 'Paga a tiempo', value: contact.on_time_rate != null ? formatPercent(Math.round(Number(contact.on_time_rate) * 100)) : '—' },
     {
       label: 'Atraso promedio',
       value: contact.avg_delay_days != null ? `${formatNumber(contact.avg_delay_days)} días` : '—',
     },
     {
       label: 'Paga a fin de ciclo',
-      value: contact.end_of_cycle_rate != null ? formatPercent(contact.end_of_cycle_rate) : '—',
+      value: contact.end_of_cycle_rate != null ? formatPercent(Math.round(Number(contact.end_of_cycle_rate) * 100)) : '—',
     },
     { label: 'Ciclos cursados', value: contact.cycles_with_debt != null ? formatNumber(contact.cycles_with_debt) : '—' },
-    { label: 'Deuda total', value: formatMoney(contact.total_pending) },
+    { label: 'Deuda total', value: formatMoney(contact.total_debt ?? contact.total_pending ?? 0) },
     { label: 'Comportamiento', value: <BehaviorBadge behavior={contact.payment_behavior} /> },
   ]
 
