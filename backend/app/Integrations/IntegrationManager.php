@@ -43,8 +43,23 @@ class IntegrationManager
             'from_number' => config('services.twilio.whatsapp_from'),
         ]);
 
-        if ($driver === 'twilio' && ! empty($creds['account_sid']) && ! empty($creds['auth_token'])) {
-            return new TwilioWhatsAppDriver($creds['account_sid'], $creds['auth_token'], $creds['from_number'] ?? '');
+        // WhatsApp sale por la misma cuenta Twilio que la voz: si la
+        // integración de WhatsApp solo tiene el número emisor, las
+        // credenciales se heredan de la integración Twilio ya activa
+        // (evita re-pegar el auth token en dos pantallas).
+        if (empty($creds['account_sid']) || empty($creds['auth_token'])) {
+            $twilio = Integration::where('provider', 'twilio')->where('status', 'active')->first();
+
+            if ($twilio) {
+                $creds += array_filter($twilio->getCredentials());
+                $driver = 'twilio';
+            }
+        }
+
+        $from = $creds['from_number'] ?? $creds['whatsapp_from'] ?? '';
+
+        if ($driver === 'twilio' && ! empty($creds['account_sid']) && ! empty($creds['auth_token']) && $from !== '') {
+            return new TwilioWhatsAppDriver($creds['account_sid'], $creds['auth_token'], $from);
         }
 
         return new SandboxWhatsAppDriver;
