@@ -51,6 +51,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('dashboard', [DashboardController::class, 'index'])->middleware('permission:dashboard.view');
         Route::get('dashboard/academic', [DashboardController::class, 'academic'])->middleware('permission:dashboard.view');
+        Route::get('dashboard/credit', [DashboardController::class, 'credit'])->middleware('permission:dashboard.view');
         Route::get('catalogs/academic', [\App\Http\Controllers\Api\V1\AcademicCatalogController::class, 'academic']);
         Route::get('imports/template', [\App\Http\Controllers\Api\V1\ImportController::class, 'template'])->middleware('permission:contacts.view');
 

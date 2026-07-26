@@ -36,6 +36,8 @@ class AcademicCatalogController extends Controller
                 ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
             'behaviors' => collect(\App\Services\Reports\PaymentBehaviorService::BEHAVIORS)
                 ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
+            'ratings' => collect(\App\Services\Reports\CreditAnalysisService::RATINGS)
+                ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
         ]]);
     }
 }

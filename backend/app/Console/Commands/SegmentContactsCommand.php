@@ -43,14 +43,26 @@ class SegmentContactsCommand extends Command
                     $segment = $this->classify($contact, $currentPeriod);
                     $profile = $behavior->profile($contact);
 
+                    // Calificación SBS: días de atraso de la deuda vencida más
+                    // antigua sin pagar (la métrica que usa la banca).
+                    $unpaid = $contact->debts
+                        ->whereNotIn('status', ['paid', 'cancelled'])
+                        ->where('pending_balance', '>', 0);
+                    $delay = (int) $unpaid->map(fn ($d) => $d->due_date ? max(0, $d->due_date->diffInDays(now(), false)) : 0)->max();
+                    $rating = \App\Services\Reports\CreditAnalysisService::rate($delay, $unpaid->isNotEmpty());
+
                     $changed = $contact->payment_segment !== $segment
                         || $contact->payment_behavior !== $profile['payment_behavior']
-                        || (int) $contact->payment_score !== (int) $profile['payment_score'];
+                        || (int) $contact->payment_score !== (int) $profile['payment_score']
+                        || $contact->credit_rating !== $rating
+                        || (int) $contact->current_delay_days !== $delay;
 
                     if ($changed) {
                         $contact->updateQuietly($profile + [
                             'payment_segment' => $segment,
                             'payment_segment_updated_at' => now(),
+                            'credit_rating' => $rating,
+                            'current_delay_days' => $delay,
                         ]);
                         $updated++;
                     }

@@ -43,6 +43,7 @@ class ContactController extends Controller
             ->when($request->enrollment_status, fn ($q, $v) => $q->where('enrollment_status', $v))
             ->when($request->payment_segment, fn ($q, $v) => $q->where('payment_segment', $v))
             ->when($request->payment_behavior, fn ($q, $v) => $q->where('payment_behavior', $v))
+            ->when($request->credit_rating, fn ($q, $v) => $q->where('credit_rating', $v))
             ->when($request->min_score, fn ($q, $v) => $q->where('payment_score', '>=', (int) $v))
             ->when($request->max_score, fn ($q, $v) => $q->where('payment_score', '<=', (int) $v))
             ->when($request->academic_period, fn ($q, $v) => $q->whereHas('debts', fn ($q2) => $q2->where('academic_period', $v)))

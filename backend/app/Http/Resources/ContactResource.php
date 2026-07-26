@@ -53,6 +53,8 @@ class ContactResource extends JsonResource
             'end_of_cycle_rate' => $this->end_of_cycle_rate !== null ? (float) $this->end_of_cycle_rate : null,
             'cycles_with_debt' => $this->cycles_with_debt,
             'payment_trend' => $this->payment_trend,
+            'credit_rating' => $this->credit_rating,
+            'current_delay_days' => $this->current_delay_days,
             'total_pending' => $this->when(isset($this->total_pending), fn () => (float) $this->total_pending),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

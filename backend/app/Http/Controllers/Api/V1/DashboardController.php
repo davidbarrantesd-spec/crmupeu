@@ -29,4 +29,15 @@ class DashboardController extends Controller
 
         return response()->json(['data' => $service->build($request->user(), $filters)]);
     }
+
+    public function credit(Request $request, \App\Services\Reports\CreditAnalysisService $service)
+    {
+        $filters = $request->validate([
+            'campus_id' => ['nullable', 'integer'],
+            'faculty_id' => ['nullable', 'integer'],
+            'career_id' => ['nullable', 'integer'],
+        ]);
+
+        return response()->json(['data' => $service->build($request->user(), $filters)]);
+    }
 }
