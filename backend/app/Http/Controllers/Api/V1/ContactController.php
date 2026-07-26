@@ -21,8 +21,9 @@ class ContactController extends Controller
             ->with(['tags', 'debts', 'campus', 'faculty', 'career', 'academicLevel'])
             ->withSum(['debts as total_pending' => fn ($q) => $q->whereNotIn('status', ['paid', 'cancelled'])], 'pending_balance')
             ->when($request->search, fn ($q, $s) => $q->where(fn ($q2) => $q2
-                ->where('first_name', 'ilike', "%{$s}%")
-                ->orWhere('last_name', 'ilike', "%{$s}%")
+                // nombre completo concatenado: encuentra "Carlos Rojas" aunque
+                // nombre y apellido vivan en columnas distintas
+                ->whereRaw("(first_name || ' ' || last_name) ilike ?", ["%{$s}%"])
                 ->orWhere('dni', 'ilike', "%{$s}%")
                 ->orWhere('phone', 'ilike', "%{$s}%")
                 ->orWhere('internal_code', 'ilike', "%{$s}%")
