@@ -217,7 +217,7 @@ export function DebtFormDialog({ open, onOpenChange, debt, contact }: DebtFormDi
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Código" error={errors.code?.message}>
-              <Input {...form.register('code')} placeholder="p. ej. PEN-2026-001" />
+              <Input {...form.register('code')} placeholder="Se genera solo si lo dejas vacío" />
             </FormField>
             <FormField label="Concepto" error={errors.concept?.message} required>
               <Input {...form.register('concept')} placeholder="p. ej. Pensión marzo" />

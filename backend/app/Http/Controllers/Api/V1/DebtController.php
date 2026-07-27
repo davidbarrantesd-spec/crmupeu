@@ -44,6 +44,15 @@ class DebtController extends Controller
 
         $contact = Contact::where('uuid', $data['contact_uuid'])->firstOrFail();
 
+        // Código autogenerado si no lo escriben: MAN-{periodo}-{correlativo}.
+        if (empty($data['code'])) {
+            $data['code'] = sprintf(
+                'MAN-%s-%04d',
+                $data['academic_period'] ?? now()->format('Y'),
+                Debt::withTrashed()->where('contact_id', $contact->id)->count() + 1
+            ).'-'.strtoupper(\Illuminate\Support\Str::random(3));
+        }
+
         $debt = Debt::create(collect($data)->except('contact_uuid')->all() + [
             'contact_id' => $contact->id,
             'origin' => 'manual',
@@ -79,7 +88,7 @@ class DebtController extends Controller
 
         return $request->validate([
             'contact_uuid' => [$updating ? 'prohibited' : 'required', 'uuid', 'exists:contacts,uuid'],
-            'code' => [$required, 'string', 'max:60'],
+            'code' => ['nullable', 'string', 'max:60'],
             'concept' => [$required, 'string', 'max:190'],
             'original_amount' => [$required, 'numeric', 'min:0'],
             'pending_balance' => [$required, 'numeric', 'min:0'],
