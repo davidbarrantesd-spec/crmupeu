@@ -67,7 +67,7 @@ export default function Debts() {
     sort: sort || undefined,
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     placeholderData: keepPreviousData,
     queryKey: ['debts', params],
     queryFn: async () => {
@@ -286,6 +286,7 @@ export default function Debts() {
         data={data}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         onRetry={() => refetch()}
         page={page}
         onPageChange={setPage}

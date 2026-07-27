@@ -57,6 +57,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge'
 import { BehaviorBadge } from '@/components/shared/BehaviorBadge'
 import { ScoreIndicator, TrendArrow } from '@/components/shared/ScoreIndicator'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { AudioPlayer } from '@/components/shared/AudioPlayer'
 import { JsonViewer } from '@/components/shared/JsonViewer'
 import { CallDialog } from '@/components/contacts/CallDialog'
@@ -88,7 +89,7 @@ export default function ContactDetail() {
   const [callOpen, setCallOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
 
-  const { data: contact, isLoading } = useQuery({
+  const { data: contact, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['contact', uuid],
     queryFn: async () => {
       // payment_timeline viene al mismo nivel que "data" en la respuesta
@@ -103,6 +104,14 @@ export default function ContactDetail() {
       <div className="space-y-4 p-6">
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-96 w-full" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6">
+        <ErrorState title="No se pudo cargar el contacto" error={error} onRetry={() => refetch()} />
       </div>
     )
   }

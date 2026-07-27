@@ -14,6 +14,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { api, apiErrorMessage, downloadFile } from '@/api/client'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { formatNumber } from '@/lib/format'
 import type { ApiResource, ImportJob } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -122,7 +123,7 @@ export default function ContactImport() {
     onError: (e) => toast.error(apiErrorMessage(e)),
   })
 
-  const { data: progress } = useQuery({
+  const { data: progress, isError: progressError } = useQuery({
     queryKey: ['import', job?.uuid],
     queryFn: async () => {
       const res = await api.get<ApiResource<ImportJob>>(`/imports/${job?.uuid}`)
@@ -368,6 +369,10 @@ export default function ContactImport() {
                 </p>
               </div>
             </div>
+
+            {progressError && !done && (
+              <ErrorState title="No se pudo consultar el avance de la importación. Se seguirá intentando." compact />
+            )}
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <ResultStat label="Creados" value={progress?.created_count} className="text-emerald-600" />

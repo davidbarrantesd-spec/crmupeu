@@ -70,7 +70,7 @@ export default function Audit() {
     date_to: dateTo || undefined,
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['audit-logs', params],
     queryFn: async () => {
       const res = await api.get<Paginated<AuditLog>>('/audit-logs', { params })
@@ -164,6 +164,7 @@ export default function Audit() {
         data={data}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         onRetry={() => refetch()}
         page={page}
         onPageChange={setPage}

@@ -6,6 +6,7 @@ import { catalogName, formatMoney, formatNumber, fullName } from '@/lib/format'
 import { RatingBadge } from '@/components/shared/RatingBadge'
 import { ScoreIndicator } from '@/components/shared/ScoreIndicator'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -35,7 +36,7 @@ export function DrillDownModal({ open, onOpenChange, title, params }: DrillDownM
     setPage(1)
   }, [paramsKey, open])
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     placeholderData: keepPreviousData,
     queryKey: ['analytics', 'drilldown', params, page],
     queryFn: async () => {
@@ -66,7 +67,7 @@ export function DrillDownModal({ open, onOpenChange, title, params }: DrillDownM
         )}
 
         {isError && (
-          <EmptyState title="Error al cargar" description="No se pudo obtener la lista de estudiantes." />
+          <ErrorState title="No se pudo cargar la lista de estudiantes" error={error} />
         )}
 
         {!isLoading && !isError && !contacts.length && (

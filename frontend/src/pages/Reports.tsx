@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { formatMoney } from '@/lib/format'
 
@@ -78,7 +79,7 @@ export default function Reports() {
     search: debouncedSearch || undefined,
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['reports', tab, params],
     queryFn: async () => {
       const res = await api.get<Paginated<ReportRow> | { data: ReportRow[] }>(`/reports/${tab}`, { params })
@@ -136,11 +137,7 @@ export default function Reports() {
           <TabsContent key={r.key} value={r.key}>
             {isLoading && <Skeleton className="h-80 w-full" />}
             {isError && (
-              <EmptyState
-                title="Error al cargar el reporte"
-                description="No se pudo obtener la información."
-                action={<Button variant="outline" onClick={() => refetch()}>Reintentar</Button>}
-              />
+              <ErrorState title="No se pudo cargar el reporte" error={error} onRetry={() => refetch()} />
             )}
             {!isLoading && !isError && !rows.length && (
               <EmptyState icon={BarChart3} title="Sin datos" description="No hay información para el rango seleccionado." />

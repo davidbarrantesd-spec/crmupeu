@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { FormField } from '@/components/shared/FormField'
 
 const MODULE_LABELS: Record<string, string> = {
@@ -55,7 +56,7 @@ export default function Roles() {
   const [newRoleOpen, setNewRoleOpen] = useState(false)
   const [newRoleName, setNewRoleName] = useState('')
 
-  const { data: roles, isLoading } = useQuery({
+  const { data: roles, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['roles'],
     queryFn: async () => {
       const res = await api.get<{ data: Role[] }>('/roles')
@@ -63,7 +64,7 @@ export default function Roles() {
     },
   })
 
-  const { data: permissionsData, isLoading: loadingPerms } = useQuery({
+  const { data: permissionsData, isLoading: loadingPerms, isError: permsError, error: permsErrorObj, refetch: refetchPerms } = useQuery({
     queryKey: ['permissions'],
     queryFn: async () => {
       const res = await api.get<{ data: Record<string, string[]> | { module: string; permissions: string[] }[] }>('/permissions')
@@ -139,6 +140,21 @@ export default function Roles() {
       <div className="p-6">
         <Skeleton className="mb-6 h-10 w-64" />
         <Skeleton className="h-96 w-full" />
+      </div>
+    )
+  }
+
+  if (isError || permsError) {
+    return (
+      <div className="p-6">
+        <ErrorState
+          title="No se pudieron cargar los roles y permisos"
+          error={error ?? permsErrorObj}
+          onRetry={() => {
+            refetch()
+            refetchPerms()
+          }}
+        />
       </div>
     )
   }

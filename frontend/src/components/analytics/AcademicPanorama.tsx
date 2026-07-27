@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Building2, Gauge, GraduationCap, Scale, Wallet } from 'lucide-react'
+import { AlertTriangle, Gauge, GraduationCap, Scale, Wallet } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -32,6 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 
 const ACADEMIC_KPIS: {
   key: keyof AcademicDashboard['kpis']
@@ -60,7 +61,7 @@ export function AcademicPanorama() {
   const [filters, setFilters] = useState<AcademicFilterValues>({})
   const [drill, setDrill] = useState<DrillState | null>(null)
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     placeholderData: keepPreviousData,
     queryKey: ['dashboard', 'academic', filters],
     queryFn: async () => {
@@ -98,12 +99,7 @@ export function AcademicPanorama() {
       </div>
 
       {isError && (
-        <EmptyState
-          icon={Building2}
-          title="Error al cargar el panorama académico"
-          description="No se pudo obtener la información del servidor."
-          action={<Button variant="outline" onClick={() => refetch()}>Reintentar</Button>}
-        />
+        <ErrorState title="No se pudo cargar el panorama académico" error={error} onRetry={() => refetch()} />
       )}
 
       {/* KPIs académicos */}

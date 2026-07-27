@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { FormField } from '@/components/shared/FormField'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 
 /** Nombres legibles para los campos de credenciales que devuelve el backend. */
 const CREDENTIAL_LABELS: Record<string, string> = {
@@ -109,7 +110,7 @@ function useSaveSettings() {
 }
 
 function GeneralTab({ canEdit }: { canEdit: boolean }) {
-  const { data: settings, isLoading } = useSettings()
+  const { data: settings, isLoading, isError, error, refetch } = useSettings()
   const save = useSaveSettings()
   const [values, setValues] = useState<SettingsType>({})
 
@@ -118,6 +119,7 @@ function GeneralTab({ canEdit }: { canEdit: boolean }) {
   }, [settings])
 
   if (isLoading) return <Skeleton className="h-72 w-full max-w-xl" />
+  if (isError) return <ErrorState title="No se pudo cargar la configuración" error={error} onRetry={() => refetch()} />
 
   const set = (key: string, value: string) => setValues((v) => ({ ...v, [key]: value }))
   const str = (key: string, fallback = '') => String(values[key] ?? fallback)
@@ -184,7 +186,7 @@ function GeneralTab({ canEdit }: { canEdit: boolean }) {
 
 function IntegrationsTab({ canEdit }: { canEdit: boolean }) {
   const queryClient = useQueryClient()
-  const { data: integrations, isLoading } = useQuery({
+  const { data: integrations, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['integrations'],
     queryFn: async () => {
       const res = await api.get<ApiResource<Integration[]>>('/integrations')
@@ -222,6 +224,10 @@ function IntegrationsTab({ canEdit }: { canEdit: boolean }) {
         ))}
       </div>
     )
+  }
+
+  if (isError) {
+    return <ErrorState title="No se pudieron cargar las integraciones" error={error} onRetry={() => refetch()} />
   }
 
   if (!integrations?.length) {
@@ -301,7 +307,7 @@ function IntegrationsTab({ canEdit }: { canEdit: boolean }) {
 }
 
 function CostsTab({ canEdit, showFinance }: { canEdit: boolean; showFinance: boolean }) {
-  const { data: settings, isLoading } = useSettings()
+  const { data: settings, isLoading, isError, error, refetch } = useSettings()
   const save = useSaveSettings()
   const [values, setValues] = useState<SettingsType>({})
 
@@ -319,6 +325,7 @@ function CostsTab({ canEdit, showFinance }: { canEdit: boolean; showFinance: boo
   })
 
   if (isLoading) return <Skeleton className="h-72 w-full max-w-xl" />
+  if (isError) return <ErrorState title="No se pudo cargar la configuración" error={error} onRetry={() => refetch()} />
 
   const set = (key: string, value: string) => setValues((v) => ({ ...v, [key]: value }))
   const str = (key: string) => String(values[key] ?? '')

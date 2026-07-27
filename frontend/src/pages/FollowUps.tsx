@@ -25,6 +25,7 @@ import { DataTable, type Column } from '@/components/shared/DataTable'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { FormField } from '@/components/shared/FormField'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 const ANY = '__any__'
@@ -104,7 +105,7 @@ function QueueTab() {
     date_to: dateTo || undefined,
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['follow-ups', params],
     queryFn: async () => {
       const res = await api.get<Paginated<FollowUp>>('/follow-ups', { params })
@@ -218,6 +219,7 @@ function QueueTab() {
         data={data}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         onRetry={() => refetch()}
         page={page}
         onPageChange={setPage}
@@ -287,7 +289,7 @@ function RulesTab() {
   const [formOpen, setFormOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<FollowUpRule | null>(null)
 
-  const { data: rules, isLoading } = useQuery({
+  const { data: rules, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['follow-up-rules'],
     queryFn: async () => {
       const res = await api.get<Paginated<FollowUpRule>>('/follow-up-rules', { params: { per_page: 100 } })
@@ -355,7 +357,10 @@ function RulesTab() {
         </div>
       )}
       {isLoading && <Skeleton className="h-40 w-full" />}
-      {!isLoading && !rules?.length && (
+      {!isLoading && isError && (
+        <ErrorState title="No se pudieron cargar las reglas" error={error} onRetry={() => refetch()} />
+      )}
+      {!isLoading && !isError && !rules?.length && (
         <EmptyState icon={Zap} title="Sin reglas" description="Crea reglas para automatizar los seguimientos." />
       )}
       {rules?.map((rule) => (

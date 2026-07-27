@@ -48,7 +48,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 
 const CHART_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#ec4899', '#84cc16']
 
@@ -84,7 +84,7 @@ export default function Dashboard() {
   const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'))
   const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'))
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     placeholderData: keepPreviousData,
     queryKey: ['dashboard', dateFrom, dateTo],
     queryFn: async () => {
@@ -136,11 +136,7 @@ export default function Dashboard() {
       />
 
       {isError && (
-        <EmptyState
-          title="Error al cargar el panel"
-          description="No se pudo obtener la información del servidor."
-          action={<Button variant="outline" onClick={() => refetch()}>Reintentar</Button>}
-        />
+        <ErrorState title="No se pudo cargar el panel" error={error} onRetry={() => refetch()} />
       )}
 
       {/* KPIs */}

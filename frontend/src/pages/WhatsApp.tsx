@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { FormField } from '@/components/shared/FormField'
 import { cn } from '@/lib/utils'
@@ -69,7 +70,7 @@ export default function WhatsApp() {
     unread: filter === 'unread' ? 1 : undefined,
   }
 
-  const { data: conversations, isLoading } = useQuery({
+  const { data: conversations, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['conversations', params],
     queryFn: async () => {
       const res = await api.get<Paginated<Conversation>>('/conversations', { params })
@@ -148,7 +149,10 @@ export default function WhatsApp() {
                 </div>
               </div>
             ))}
-          {!isLoading && !conversations?.length && (
+          {!isLoading && isError && (
+            <ErrorState title="No se pudieron cargar las conversaciones" error={error} onRetry={() => refetch()} compact className="m-3" />
+          )}
+          {!isLoading && !isError && !conversations?.length && (
             <EmptyState icon={MessageCircle} title="Sin conversaciones" description="No hay conversaciones con los filtros aplicados." />
           )}
           {conversations?.map((conv) => (
@@ -257,7 +261,7 @@ function ConversationThread({ uuid, summary, onBack }: { uuid: string; summary: 
     refetchInterval: 15000,
   })
 
-  const { data: messages, isLoading } = useQuery({
+  const { data: messages, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['messages', uuid],
     queryFn: async () => {
       const res = await api.get<Paginated<Message>>(`/conversations/${uuid}/messages`)
@@ -414,6 +418,9 @@ function ConversationThread({ uuid, summary, onBack }: { uuid: string; summary: 
 
         {/* Mensajes */}
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          {!isLoading && isError && (
+            <ErrorState title="No se pudieron cargar los mensajes" error={error} onRetry={() => refetch()} compact />
+          )}
           {isLoading && (
             <div className="space-y-3">
               <Skeleton className="ml-auto h-12 w-56 rounded-2xl" />
@@ -661,7 +668,7 @@ function TemplatePickerDialog({
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null)
   const [variables, setVariables] = useState<Record<string, string>>({})
 
-  const { data: templates, isLoading } = useQuery({
+  const { data: templates, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['whatsapp-templates'],
     queryFn: async () => {
       const res = await api.get<Paginated<WhatsAppTemplate>>('/whatsapp-templates', { params: { per_page: 100 } })
@@ -687,7 +694,10 @@ function TemplatePickerDialog({
           <DialogDescription>Selecciona una plantilla aprobada y completa sus variables.</DialogDescription>
         </DialogHeader>
         {isLoading && <Skeleton className="h-32 w-full" />}
-        {!isLoading && !templates?.length && <EmptyState icon={FileText} title="Sin plantillas" className="py-6" />}
+        {!isLoading && isError && (
+          <ErrorState title="No se pudieron cargar las plantillas" error={error} onRetry={() => refetch()} compact />
+        )}
+        {!isLoading && !isError && !templates?.length && <EmptyState icon={FileText} title="Sin plantillas" className="py-6" />}
         <div className="max-h-48 space-y-1.5 overflow-y-auto">
           {templates?.map((t) => (
             <button

@@ -76,7 +76,7 @@ export default function Users() {
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
   const [scopes, setScopes] = useState<ScopeRow[]>([])
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['users', { page, search: debouncedSearch }],
     queryFn: async () => {
       const res = await api.get<Paginated<User>>('/users', {
@@ -259,6 +259,7 @@ export default function Users() {
         data={data}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         onRetry={() => refetch()}
         page={page}
         onPageChange={setPage}

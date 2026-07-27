@@ -37,6 +37,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { FormField } from '@/components/shared/FormField'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { cn } from '@/lib/utils'
 
 const NONE = '__none__'
@@ -176,7 +177,7 @@ export default function CampaignWizard() {
   const type = form.watch('type')
 
   // Cargar campaña existente en modo edición
-  const { data: existing, isLoading: loadingExisting } = useQuery({
+  const { data: existing, isLoading: loadingExisting, isError: errorExisting, error: existingError, refetch: refetchExisting } = useQuery({
     queryKey: ['campaign', uuid],
     queryFn: async () => {
       const res = await api.get<ApiResource<Campaign>>(`/campaigns/${uuid}`)
@@ -429,6 +430,14 @@ export default function CampaignWizard() {
       <div className="space-y-4 p-6">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-96 w-full" />
+      </div>
+    )
+  }
+
+  if (isEdit && errorExisting) {
+    return (
+      <div className="p-6">
+        <ErrorState title="No se pudo cargar la campaña" error={existingError} onRetry={() => refetchExisting()} />
       </div>
     )
   }

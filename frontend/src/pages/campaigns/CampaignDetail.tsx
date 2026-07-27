@@ -44,6 +44,7 @@ import { DataTable, type Column } from '@/components/shared/DataTable'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { CAMPAIGN_TYPE_META } from './Campaigns'
 
 export default function CampaignDetail() {
@@ -57,7 +58,7 @@ export default function CampaignDetail() {
   const [addOpen, setAddOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
 
-  const { data: campaign, isLoading } = useQuery({
+  const { data: campaign, isLoading, isError: campaignError, error: campaignErrorObj, refetch: refetchCampaign } = useQuery({
     queryKey: ['campaign', uuid],
     queryFn: async () => {
       const res = await api.get<ApiResource<Campaign>>(`/campaigns/${uuid}`)
@@ -82,7 +83,7 @@ export default function CampaignDetail() {
   ])
   useEchoInvalidate('calls', ['CallUpdated'], [['campaign', uuid, 'contacts']])
 
-  const { data: contacts, isLoading: loadingContacts, isError, refetch } = useQuery({
+  const { data: contacts, isLoading: loadingContacts, isError, error, refetch } = useQuery({
     queryKey: ['campaign', uuid, 'contacts', page],
     queryFn: async () => {
       const res = await api.get<Paginated<CampaignContact>>(`/campaigns/${uuid}/contacts`, {
@@ -131,6 +132,14 @@ export default function CampaignDetail() {
     } catch (e) {
       toast.error(apiErrorMessage(e))
     }
+  }
+
+  if (campaignError) {
+    return (
+      <div className="p-6">
+        <ErrorState title="No se pudo cargar la campaña" error={campaignErrorObj} onRetry={() => refetchCampaign()} />
+      </div>
+    )
   }
 
   if (isLoading || !campaign) {
@@ -282,6 +291,7 @@ export default function CampaignDetail() {
             data={contacts}
             isLoading={loadingContacts}
             isError={isError}
+            error={error}
             onRetry={() => refetch()}
             page={page}
             onPageChange={setPage}

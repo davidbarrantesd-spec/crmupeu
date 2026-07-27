@@ -45,7 +45,7 @@ export default function Calls() {
     date_to: dateTo || undefined,
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     placeholderData: keepPreviousData,
     queryKey: ['calls', params],
     queryFn: async () => {
@@ -175,6 +175,7 @@ export default function Calls() {
         data={data}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         onRetry={() => refetch()}
         page={page}
         onPageChange={setPage}

@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from './EmptyState'
+import { ErrorState } from './ErrorState'
 import type { Paginated } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +21,8 @@ interface DataTableProps<T> {
   data: Paginated<T> | undefined
   isLoading?: boolean
   isError?: boolean
+  /** Error original de la query, para mostrar un mensaje legible. */
+  error?: unknown
   onRetry?: () => void
   page: number
   onPageChange: (page: number) => void
@@ -38,6 +41,7 @@ export function DataTable<T>({
   data,
   isLoading,
   isError,
+  error,
   onRetry,
   page,
   onPageChange,
@@ -101,18 +105,7 @@ export function DataTable<T>({
           {!isLoading && isError && (
             <TableRow>
               <TableCell colSpan={columns.length}>
-                <EmptyState
-                  icon={AlertCircle}
-                  title="Error al cargar los datos"
-                  description="Ocurrió un problema al comunicarse con el servidor."
-                  action={
-                    onRetry && (
-                      <Button variant="outline" size="sm" onClick={onRetry}>
-                        Reintentar
-                      </Button>
-                    )
-                  }
-                />
+                <ErrorState title="No se pudo cargar la información" error={error} onRetry={onRetry} />
               </TableCell>
             </TableRow>
           )}

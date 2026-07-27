@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { FormField } from '@/components/shared/FormField'
 import { JsonViewer } from '@/components/shared/JsonViewer'
@@ -77,7 +78,7 @@ export default function Prompts() {
   const [simulatorOpen, setSimulatorOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null)
 
-  const { data: prompts, isLoading } = useQuery({
+  const { data: prompts, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['prompts'],
     queryFn: async () => {
       const res = await api.get<Paginated<Prompt>>('/prompts', { params: { per_page: 100 } })
@@ -85,7 +86,7 @@ export default function Prompts() {
     },
   })
 
-  const { data: selected, isLoading: loadingSelected } = useQuery({
+  const { data: selected, isLoading: loadingSelected, isError: errorSelected, error: selectedError, refetch: refetchSelected } = useQuery({
     queryKey: ['prompt', selectedUuid],
     queryFn: async () => {
       const res = await api.get<ApiResource<Prompt>>(`/prompts/${selectedUuid}`)
@@ -137,7 +138,10 @@ export default function Prompts() {
         {/* Lista */}
         <div className="space-y-2">
           {isLoading && Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
-          {!isLoading && !prompts?.length && (
+          {!isLoading && isError && (
+            <ErrorState title="No se pudieron cargar los prompts" error={error} onRetry={() => refetch()} compact />
+          )}
+          {!isLoading && !isError && !prompts?.length && (
             <EmptyState icon={Bot} title="Sin prompts" description="Crea tu primer agente de IA." />
           )}
           {prompts?.map((p) => (
@@ -176,6 +180,9 @@ export default function Prompts() {
             />
           )}
           {!creating && selectedUuid && loadingSelected && <Skeleton className="h-96 w-full" />}
+          {!creating && selectedUuid && !loadingSelected && errorSelected && (
+            <ErrorState title="No se pudo cargar el prompt" error={selectedError} onRetry={() => refetchSelected()} />
+          )}
           {!creating && selected && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">

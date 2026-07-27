@@ -69,7 +69,7 @@ export default function Campaigns() {
     type: type === ANY ? undefined : type,
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['campaigns', params],
     queryFn: async () => {
       const res = await api.get<Paginated<Campaign>>('/campaigns', { params })
@@ -279,6 +279,7 @@ export default function Campaigns() {
         data={data}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         onRetry={() => refetch()}
         page={page}
         onPageChange={setPage}

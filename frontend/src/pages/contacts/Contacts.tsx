@@ -101,7 +101,7 @@ export default function Contacts() {
     sort: sortByDebt ? 'total_debt' : sort || undefined,
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     placeholderData: keepPreviousData,
     queryKey: ['contacts', params],
     queryFn: async () => {
@@ -418,6 +418,7 @@ export default function Contacts() {
         data={data}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         onRetry={() => refetch()}
         page={page}
         onPageChange={setPage}

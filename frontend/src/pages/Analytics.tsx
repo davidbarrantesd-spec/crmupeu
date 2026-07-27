@@ -9,7 +9,6 @@ import {
   GraduationCap,
   Landmark,
   Search,
-  ShieldAlert,
   Users,
   Wallet,
   X,
@@ -29,6 +28,7 @@ import { api } from '@/api/client'
 import { catalogName, formatMoney, formatNumber, formatPercent, fullName } from '@/lib/format'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { ChartCard, tooltipStyle } from '@/components/shared/ChartCard'
 import { RatingBadge, RATING_ORDER, ratingColorHex, ratingLabel, ratingSoftBg } from '@/components/shared/RatingBadge'
 import { BehaviorBadge } from '@/components/shared/BehaviorBadge'
@@ -97,7 +97,7 @@ function CreditRiskTab() {
   const [filters, setFilters] = useState<AcademicFilterValues>({})
   const [drill, setDrill] = useState<DrillState | null>(null)
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     placeholderData: keepPreviousData,
     queryKey: ['dashboard', 'credit', filters],
     queryFn: async () => {
@@ -133,12 +133,7 @@ function CreditRiskTab() {
       </div>
 
       {isError && (
-        <EmptyState
-          icon={ShieldAlert}
-          title="Error al cargar el análisis crediticio"
-          description="No se pudo obtener la información del servidor."
-          action={<Button variant="outline" onClick={() => refetch()}>Reintentar</Button>}
-        />
+        <ErrorState title="No se pudo cargar el análisis crediticio" error={error} onRetry={() => refetch()} />
       )}
 
       {/* KPIs */}
@@ -467,7 +462,7 @@ function StudentReportSection({ byRating }: { byRating: RatingStat[] }) {
     enabled: debouncedSearch.trim().length >= 2 && !selectedUuid,
   })
 
-  const { data: report, isLoading: loadingReport } = useQuery({
+  const { data: report, isLoading: loadingReport, isError: reportError, error: reportErrorObj, refetch: refetchReport } = useQuery({
     queryKey: ['analytics', 'student-report', selectedUuid],
     queryFn: async () => {
       // payment_timeline viene al mismo nivel que "data" en la respuesta
@@ -529,6 +524,9 @@ function StudentReportSection({ byRating }: { byRating: RatingStat[] }) {
       </div>
 
       {selectedUuid && loadingReport && <Skeleton className="mt-4 h-64" />}
+      {selectedUuid && !loadingReport && reportError && (
+        <ErrorState title="No se pudo cargar el informe del estudiante" error={reportErrorObj} onRetry={() => refetchReport()} compact className="mt-4" />
+      )}
       {selectedUuid && !loadingReport && report && (
         <CreditReportCard
           contact={report}

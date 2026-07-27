@@ -45,7 +45,7 @@ export default function Agreements() {
     promise_date_to: promiseTo || undefined,
   }
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['agreements', params],
     queryFn: async () => {
       const res = await api.get<Paginated<Agreement>>('/agreements', { params })
@@ -187,6 +187,7 @@ export default function Agreements() {
         data={data}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         onRetry={() => refetch()}
         page={page}
         onPageChange={setPage}

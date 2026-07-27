@@ -60,7 +60,7 @@ function ContactPicker({
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search)
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isError } = useQuery({
     queryKey: ['contacts', 'picker', debouncedSearch],
     queryFn: async () => {
       const res = await api.get<Paginated<Contact>>('/contacts', {
@@ -100,7 +100,10 @@ function ContactPicker({
                 Buscando…
               </div>
             )}
-            {!isFetching && !data?.length && (
+            {!isFetching && isError && (
+              <p className="py-4 text-center text-sm text-destructive">No se pudo buscar contactos. Inténtalo de nuevo.</p>
+            )}
+            {!isFetching && !isError && !data?.length && (
               <p className="py-4 text-center text-sm text-muted-foreground">Sin resultados</p>
             )}
             {!isFetching &&
