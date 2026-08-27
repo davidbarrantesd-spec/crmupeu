@@ -2,7 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict IP9cgPj3bL2qcMElrJYXyG1pXUcLKiT2p3Y3SVwMTIsZQhDGk7Wyg7h39M2QSkc
 
 -- Dumped from database version 16.14
 -- Dumped by pg_dump version 16.14
@@ -8426,5 +8425,4 @@ ALTER TABLE ONLY public.user_scopes
 -- PostgreSQL database dump complete
 --
 
-\unrestrict IP9cgPj3bL2qcMElrJYXyG1pXUcLKiT2p3Y3SVwMTIsZQhDGk7Wyg7h39M2QSkc
 
