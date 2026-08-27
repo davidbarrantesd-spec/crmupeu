@@ -41,12 +41,20 @@ class RestoreRailwayCommand extends Command
         $dsn = sprintf('pgsql:host=%s;port=%d;dbname=%s', $p['host'], $p['port'] ?? 5432, ltrim($p['path'], '/'));
         $pdo = new \PDO($dsn, $p['user'], urldecode($p['pass'] ?? ''), [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
 
-        // Guard de idempotencia
+        // Guard de idempotencia: datos ya restaurados + post-pasos hechos.
         $has = (bool) $pdo->query("select to_regclass('public.contacts')")->fetchColumn();
+        $done = (bool) $pdo->query("select to_regclass('public._restore_done')")->fetchColumn();
         if ($has && ! $this->option('force')) {
-            $n = (int) $pdo->query('select count(*) from contacts')->fetchColumn();
-            if ($n > 0) {
-                $this->info("La base destino ya tiene {$n} contactos; nada que hacer (usa --force para reintentar).");
+            $n = (int) $pdo->query('select count(*) from public.contacts')->fetchColumn();
+            if ($n > 0 && $done) {
+                $this->info("Restauración ya completa ({$n} contactos); nada que hacer.");
+
+                return self::SUCCESS;
+            }
+            if ($n > 0 && ! $done) {
+                // El dump ya entró; solo faltan los pasos posteriores.
+                $this->postRestore($pdo);
+                $this->info('Post-pasos completados.');
 
                 return self::SUCCESS;
             }
@@ -58,28 +66,35 @@ class RestoreRailwayCommand extends Command
         $pdo->exec('drop schema public cascade; create schema public;');
         $pdo->exec(file_get_contents($file));
 
-        // Credenciales del entorno local no sirven aquí (APP_KEY distinto).
-        $pdo->exec('truncate integrations, personal_access_tokens restart identity cascade');
+        $this->postRestore($pdo);
 
-        // Usuario admin de producción
+        $c = $pdo->query('select count(*) from public.contacts')->fetchColumn();
+        $d = $pdo->query('select count(*) from public.debts')->fetchColumn();
+        $this->info("Restauración completa: {$c} contactos, {$d} deudas.");
+
+        return self::SUCCESS;
+    }
+
+    /** Post-pasos: credenciales locales fuera, admin de producción, marcador. */
+    protected function postRestore(\PDO $pdo): void
+    {
+        // El dump deja search_path vacío: siempre nombres calificados.
+        $pdo->exec('truncate public.integrations, public.personal_access_tokens restart identity cascade');
+
         $pass = env('RESTORE_ADMIN_PASSWORD');
         if ($pass) {
             $hash = password_hash($pass, PASSWORD_BCRYPT);
-            $pdo->prepare("insert into users (uuid, name, email, password, status, created_at, updated_at)
+            $pdo->prepare("insert into public.users (uuid, name, email, password, status, created_at, updated_at)
                 values (gen_random_uuid(), 'David Barrantes', 'claudedti.itam@upeu.edu.pe', ?, 'active', now(), now())
                 on conflict (email) do update set password = excluded.password, status = 'active'")->execute([$hash]);
-            $rid = $pdo->query("select id from roles where name = 'Superadministrador' limit 1")->fetchColumn();
-            $uid = $pdo->query("select id from users where email = 'claudedti.itam@upeu.edu.pe'")->fetchColumn();
+            $rid = $pdo->query("select id from public.roles where name = 'Superadministrador' limit 1")->fetchColumn();
+            $uid = $pdo->query("select id from public.users where email = 'claudedti.itam@upeu.edu.pe'")->fetchColumn();
             if ($rid && $uid) {
-                $pdo->prepare("insert into model_has_roles (role_id, model_type, model_id) values (?, 'App\\Models\\User', ?) on conflict do nothing")
+                $pdo->prepare("insert into public.model_has_roles (role_id, model_type, model_id) values (?, 'App\\Models\\User', ?) on conflict do nothing")
                     ->execute([$rid, $uid]);
             }
         }
 
-        $c = $pdo->query('select count(*) from contacts')->fetchColumn();
-        $d = $pdo->query('select count(*) from debts')->fetchColumn();
-        $this->info("Restauración completa: {$c} contactos, {$d} deudas.");
-
-        return self::SUCCESS;
+        $pdo->exec('create table if not exists public._restore_done (at timestamptz default now())');
     }
 }
