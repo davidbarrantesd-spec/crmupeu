@@ -53,6 +53,9 @@ class RestoreRailwayCommand extends Command
         }
 
         $this->info('Ejecutando respaldo ('.round(filesize($file) / 1e6, 1).' MB)...');
+        // Esquema limpio: una restauración a medias (deploy interrumpido,
+        // migraciones previas) dejaría tablas duplicadas.
+        $pdo->exec('drop schema public cascade; create schema public;');
         $pdo->exec(file_get_contents($file));
 
         // Credenciales del entorno local no sirven aquí (APP_KEY distinto).
